@@ -80,7 +80,7 @@ export default function More({ showToast }) {
 
   return (
     <div className="view">
-      <div className="hero">
+      <div style={{ background: 'var(--bg)', borderBottom: 'var(--border)', padding: '52px 16px 20px', marginBottom: 14 }}>
         <div className="eyebrow">everee health · More</div>
         <h1>More</h1>
         <p>Your wellness plan, symptom trends, and medication log.</p>
@@ -183,7 +183,7 @@ export default function More({ showToast }) {
                     <CartesianGrid strokeDasharray="2 4" stroke="var(--s3)" />
                     <XAxis dataKey="date" tick={{ fontSize: 8, fill: 'var(--ink3)' }} />
                     <YAxis domain={[0, 5]} tick={{ fontSize: 8, fill: 'var(--ink3)' }} />
-                    <Tooltip contentStyle={{ background: 'var(--s2)', border: 'var(--border)', borderRadius: 8, fontSize: 11 }} />
+                    <Tooltip contentStyle={{ background: 'var(--s1)', border: 'var(--border)', borderRadius: 8, fontSize: 11 }} />
                     <Line type="monotone" dataKey="dizziness" stroke="#6366F1" dot={false} strokeWidth={1.5} name="Dizziness" />
                     <Line type="monotone" dataKey="fatigue" stroke="#EC4899" dot={false} strokeWidth={1.5} name="Fatigue" />
                     <Line type="monotone" dataKey="anxiety" stroke="#F59E0B" dot={false} strokeWidth={1.5} name="Anxiety" />

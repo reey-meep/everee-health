@@ -138,6 +138,27 @@ const civil = dateStr => {
 // (heartRate), not the hyphenated one used in the URL path (heart-rate).
 const payloadKey = dataType => dataType.replace(/-([a-z])/g, (_, c) => c.toUpperCase())
 
+// Filter expressions use snake_case throughout, including the type prefix:
+// heart_rate.sample_time.physical_time. `sleep` is identical in all three
+// casings, which is why it was the only filter that worked.
+const filterKey = dataType => dataType.replace(/-/g, '_')
+
+// Rollup responses expose aggregates (countSum, millimetersSum) rather than the
+// raw DataPoint fields, and return them as strings.
+const firstNum = (obj, candidates = []) => {
+  if (!obj || typeof obj !== 'object') return null
+  for (const c of candidates) {
+    const v = num(obj[c])
+    if (v != null && !Number.isNaN(v)) return v
+  }
+  for (const [k, v] of Object.entries(obj)) {
+    if (typeof v === 'object' || /time|interval|date/i.test(k)) continue
+    const n = num(v)
+    if (n != null && !Number.isNaN(n)) return n
+  }
+  return null
+}
+
 // Local-midnight bounds as RFC-3339, for physical_time filters.
 const dayBoundsISO = dateStr => {
   const [y, m, d] = dateStr.split('-').map(Number)
@@ -170,18 +191,21 @@ async function listPoints(dataType, filter, pageSize = 1440) {
 }
 
 const dayFilter = (dataType, field, date) => {
-  const k = payloadKey(dataType)
+  const k = filterKey(dataType)
   return `${k}.${field} >= "${date}" AND ${k}.${field} < "${addDays(date, 1)}"`
 }
+
+// These four reject dailyRollUp outright: "DailyRollup is not supported for
+// data type X ... supported: list, reconcile".
+const listDaily = (dataType, date) => listPoints(dataType, dayFilter(dataType, 'date', date), 100)
+const listSamples = (dataType, date) => listPoints(dataType, dayFilter(dataType, 'sample_time.civil_time', date), 10000)
 
 const num = v => (typeof v === 'number' ? v : v == null ? null : Number(v))
 const round = (v, dp = 0) => (v == null || Number.isNaN(v) ? null : Math.round(v * 10 ** dp) / 10 ** dp)
 
 // ── HEART RATE ────────────────────────────────────────────
 export async function fetchHeartRatePoints(date) {
-  const { start, end } = dayBoundsISO(date)
-  const filter = `heartRate.sample_time.physical_time >= "${start}" AND heartRate.sample_time.physical_time < "${end}"`
-  return listPoints('heart-rate', filter, 10000)
+  return listSamples('heart-rate', date)
 }
 
 const hrValue = p => num(p?.heartRate?.beatsPerMinute)
@@ -218,17 +242,17 @@ export async function avgHRInWindow(startMs, endMs) {
 export async function fetchDaySnapshot(date) {
   const [
     stepsRoll, distanceRoll, floorsRoll, azmRoll,
-    restingRoll, hrvRoll, spo2Roll, respRoll,
+    restingPts, hrvPts, spo2Pts, respPts,
     hrPoints, sleepPoints,
   ] = await Promise.all([
     rollupDaily('steps', date),
     rollupDaily('distance', date),
     rollupDaily('floors', date),
     rollupDaily('active-zone-minutes', date),
-    rollupDaily('daily-resting-heart-rate', date),
-    rollupDaily('heart-rate-variability', date),
-    rollupDaily('oxygen-saturation', date),
-    rollupDaily('daily-respiratory-rate', date),
+    listDaily('daily-resting-heart-rate', date),
+    listSamples('heart-rate-variability', date),
+    listSamples('oxygen-saturation', date),
+    listDaily('daily-respiratory-rate', date),
     fetchHeartRatePoints(date),
     listPoints('sleep', dayFilter('sleep', 'interval.civil_end_time', date), 25),
   ])
@@ -271,17 +295,31 @@ export async function fetchDaySnapshot(date) {
   }
 
   const hrVals = hrPoints.map(hrValue).filter(v => v != null)
-  const steps = first(stepsRoll, r => r?.steps?.count)
-  const distance_mm = first(distanceRoll, r => r?.distance?.millimeters)
-  const azm = first(azmRoll, r => r?.activeZoneMinutes?.activeZoneMinutes)
+
+  // Rollup payloads are aggregates: steps.countSum, distance.millimetersSum.
+  const steps = first(stepsRoll, r => firstNum(r?.steps, ['countSum', 'count']))
+  const distance_mm = first(distanceRoll, r => firstNum(r?.distance, ['millimetersSum', 'millimeters']))
+  const floors = first(floorsRoll, r => firstNum(r?.floors, ['countSum', 'count']))
+
+  // Active zone minutes come split by zone rather than as a single total.
+  const azmRow = azmRoll.find(r => r?.activeZoneMinutes)?.activeZoneMinutes
+  const zone = k => num(azmRow?.[k]) || 0
+  const azm = azmRow ? zone('sumInFatBurnHeartZone') + zone('sumInCardioHeartZone') + zone('sumInPeakHeartZone') : null
+  const cardio = azmRow ? zone('sumInCardioHeartZone') + zone('sumInPeakHeartZone') : null
+
+  // list-based vitals: average the day's samples.
+  const avgOf = (pts, dataType, candidates) => {
+    const vals = pts.map(p => firstNum(p?.[payloadKey(dataType)], candidates)).filter(v => v != null)
+    return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null
+  }
 
   return {
     // Activity
     steps,
     distance_km: distance_mm != null ? round(distance_mm / 1e6, 2) : null,
-    floors: first(floorsRoll, r => r?.floors?.count),
+    floors,
     active_zone_minutes: azm,
-    cardio_minutes: azm,
+    cardio_minutes: cardio,
     walk_minutes: null,      // requires the exercise data type; not wired yet
     weights_detected: false, // as above
 
@@ -289,14 +327,14 @@ export async function fetchDaySnapshot(date) {
     sleep_hours,
     sleep_stages,
     resting_hr: round(
-      first(restingRoll, r => r?.dailyRestingHeartRate?.beatsPerMinute)
+      avgOf(restingPts, 'daily-resting-heart-rate', ['beatsPerMinute'])
       ?? (hrVals.length ? Math.min(...hrVals) : null)
     ),
     avg_hr: hrVals.length ? round(hrVals.reduce((a, b) => a + b, 0) / hrVals.length) : null,
     peak_hr: hrVals.length ? round(Math.max(...hrVals)) : null,
-    hrv: round(first(hrvRoll, r => r?.heartRateVariability?.rootMeanSquareOfSuccessiveDifferencesMilliseconds)),
-    spo2: round(first(spo2Roll, r => r?.oxygenSaturation?.percentage), 1),
-    respiratory_rate: round(first(respRoll, r => r?.dailyRespiratoryRate?.breathsPerMinute), 1),
+    hrv: round(avgOf(hrvPts, 'heart-rate-variability', ['rootMeanSquareOfSuccessiveDifferencesMilliseconds'])),
+    spo2: round(avgOf(spo2Pts, 'oxygen-saturation', ['percentage', 'percentageAvg']), 1),
+    respiratory_rate: round(avgOf(respPts, 'daily-respiratory-rate', ['breathsPerMinute']), 1),
 
     hr_points: hrPoints
       .map(p => ({ t: new Date(hrTime(p)).getTime(), v: hrValue(p) }))

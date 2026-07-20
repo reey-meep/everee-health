@@ -11,8 +11,32 @@
 --
 -- This script is idempotent: safe to run more than once.
 
--- 1. DROP THE BROKEN STUB (verified empty: 0 rows, no data loss)
-drop table if exists food_entries cascade;
+-- 0. SAFETY GUARDS -- added after this script was accidentally run against the
+-- wrong Supabase project. Do not remove.
+
+-- Guard A: refuse to run anywhere but the everee-health database. That project
+-- is identifiable by its legacy tables daily_scores / checkins.
+do $$
+begin
+  if to_regclass('public.daily_scores') is null and to_regclass('public.checkins') is null then
+    raise exception
+      'WRONG PROJECT: expected the everee-health database (ref jdxtlxpvimjvcfrmeeap), identified by legacy tables daily_scores/checkins. Nothing was changed.';
+  end if;
+end $$;
+
+-- Guard B: only drop food_entries if it is the empty broken stub. If it holds
+-- any rows, abort rather than destroy data.
+do $$
+begin
+  if to_regclass('public.food_entries') is not null then
+    if (select count(*) from public.food_entries) > 0 then
+      raise exception
+        'REFUSING TO DROP: public.food_entries contains % row(s). Inspect it manually before rerunning.',
+        (select count(*) from public.food_entries);
+    end if;
+    drop table public.food_entries cascade;
+  end if;
+end $$;
 
 -- 2. TABLES
 

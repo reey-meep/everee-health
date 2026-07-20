@@ -15,7 +15,7 @@ function InsightCard({ card }) {
             {isGood ? '↓ Helps' : '↑ Raises'} · {card.impact} pt impact · n={card.n}
           </div>
           {card.lag > 0 && (
-            <div style={{ fontFamily: 'var(--mono)', fontSize: 8, color: 'var(--ink3)', background: 'var(--s2)', padding: '1px 6px', borderRadius: 99 }}>next-day effect</div>
+            <div style={{ fontFamily: 'var(--mono)', fontSize: 8, color: 'var(--ink3)', background: 'var(--s1)', padding: '1px 6px', borderRadius: 99 }}>next-day effect</div>
           )}
         </div>
         <div style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--ink)', lineHeight: 1.3, marginBottom: 5 }}>{card.headline}</div>
@@ -54,7 +54,7 @@ export default function Analytics({ showToast }) {
 
   if (loading) return (
     <div className="view">
-      <div className="hero">
+      <div style={{ background: 'var(--bg)', borderBottom: 'var(--border)', padding: '52px 16px 20px', marginBottom: 14 }}>
         <div className="eyebrow">everee health · Analytics</div>
         <h1>Running analysis</h1>
         <p>Correlating all your data across every dimension. This takes a moment.</p>
@@ -69,7 +69,7 @@ export default function Analytics({ showToast }) {
 
   if (!result?.dataQuality?.sufficient) return (
     <div className="view">
-      <div className="hero">
+      <div style={{ background: 'var(--bg)', borderBottom: 'var(--border)', padding: '52px 16px 20px', marginBottom: 14 }}>
         <div className="eyebrow">everee health · Analytics</div>
         <h1>Building your picture</h1>
         <p>Analytics need at least 5 days of symptom scores to find patterns.</p>
@@ -99,7 +99,7 @@ export default function Analytics({ showToast }) {
 
   return (
     <div className="view">
-      <div className="hero">
+      <div style={{ background: 'var(--bg)', borderBottom: 'var(--border)', padding: '52px 16px 20px', marginBottom: 14 }}>
         <div className="eyebrow">everee health · Analytics</div>
         <h1>Your patterns</h1>
         <p>
@@ -160,7 +160,7 @@ export default function Analytics({ showToast }) {
                     <CartesianGrid strokeDasharray="2 4" stroke="var(--s3)" />
                     <XAxis dataKey="date" tickFormatter={d => d.slice(5)} tick={{ fontSize: 7, fill: 'var(--ink3)' }} />
                     <YAxis domain={[1, 5]} tick={{ fontSize: 7, fill: 'var(--ink3)' }} width={16} />
-                    <Tooltip contentStyle={{ background: 'var(--s2)', border: '1px solid var(--bd)', borderRadius: 8, fontSize: 11 }} />
+                    <Tooltip contentStyle={{ background: 'var(--s1)', border: '1px solid var(--bd)', borderRadius: 8, fontSize: 11 }} />
                     {['dizziness','fatigue','gut','anxiety'].map(k => (
                       <Line key={k} type="monotone" dataKey={k} stroke={SYMPTOM_COLORS[k]} dot={false} strokeWidth={1.5} name={k} connectNulls />
                     ))}
@@ -265,7 +265,7 @@ export default function Analytics({ showToast }) {
                     <BarChart data={Object.entries(ci.phases).map(([phase, val]) => ({ phase: PHASE_LABELS[phase] || phase, avg: val.avg, n: val.n }))} margin={{ top: 4, right: 4, left: -16, bottom: 4 }}>
                       <XAxis dataKey="phase" tick={{ fontSize: 7, fill: 'var(--ink3)' }} />
                       <YAxis domain={[0, 5]} tick={{ fontSize: 7, fill: 'var(--ink3)' }} />
-                      <Tooltip contentStyle={{ background: 'var(--s2)', border: '1px solid var(--bd)', fontSize: 10 }} />
+                      <Tooltip contentStyle={{ background: 'var(--s1)', border: '1px solid var(--bd)', fontSize: 10 }} />
                       <Bar dataKey="avg" radius={[3, 3, 0, 0]}>
                         {Object.entries(ci.phases).map(([phase], i) => (
                           <Cell key={i} fill={['luteal_late','pms'].includes(phase) ? '#EF4444' : '#6366F1'} fillOpacity={0.7} />

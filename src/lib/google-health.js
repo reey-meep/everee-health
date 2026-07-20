@@ -127,9 +127,23 @@ async function ghFetch(path, { method = 'GET', body = null } = {}) {
 }
 
 // ── REQUEST BUILDERS ──────────────────────────────────────
+// CivilDateTime = { date: google.type.Date, time?: google.type.TimeOfDay }.
+// The year/month/day live under `date`, not at the top level.
 const civil = dateStr => {
   const [year, month, day] = dateStr.split('-').map(Number)
-  return { year, month, day }
+  return { date: { year, month, day } }
+}
+
+// Filter expressions and response payloads key off the camelCase data-type name
+// (heartRate), not the hyphenated one used in the URL path (heart-rate).
+const payloadKey = dataType => dataType.replace(/-([a-z])/g, (_, c) => c.toUpperCase())
+
+// Local-midnight bounds as RFC-3339, for physical_time filters.
+const dayBoundsISO = dateStr => {
+  const [y, m, d] = dateStr.split('-').map(Number)
+  const start = new Date(y, m - 1, d, 0, 0, 0, 0)
+  const end = new Date(y, m - 1, d + 1, 0, 0, 0, 0)
+  return { start: start.toISOString(), end: end.toISOString() }
 }
 const addDays = (dateStr, n) => {
   const [y, m, d] = dateStr.split('-').map(Number)
@@ -155,15 +169,19 @@ async function listPoints(dataType, filter, pageSize = 1440) {
   return r.ok ? (r.data?.dataPoints || []) : []
 }
 
-const dayFilter = (dataType, field, date) =>
-  `${dataType}.${field} >= "${date}" AND ${dataType}.${field} < "${addDays(date, 1)}"`
+const dayFilter = (dataType, field, date) => {
+  const k = payloadKey(dataType)
+  return `${k}.${field} >= "${date}" AND ${k}.${field} < "${addDays(date, 1)}"`
+}
 
 const num = v => (typeof v === 'number' ? v : v == null ? null : Number(v))
 const round = (v, dp = 0) => (v == null || Number.isNaN(v) ? null : Math.round(v * 10 ** dp) / 10 ** dp)
 
 // ── HEART RATE ────────────────────────────────────────────
 export async function fetchHeartRatePoints(date) {
-  return listPoints('heart-rate', dayFilter('heart-rate', 'sample_time.civil_time', date), 10000)
+  const { start, end } = dayBoundsISO(date)
+  const filter = `heartRate.sample_time.physical_time >= "${start}" AND heartRate.sample_time.physical_time < "${end}"`
+  return listPoints('heart-rate', filter, 10000)
 }
 
 const hrValue = p => num(p?.heartRate?.beatsPerMinute)
@@ -231,7 +249,8 @@ export async function fetchDaySnapshot(date) {
     let sawStage = false
     sleepPoints.forEach(p => {
       (p?.sleep?.stages || []).forEach(st => {
-        const start = st?.interval?.startTime, end = st?.interval?.endTime
+        const start = st?.startTime || st?.interval?.startTime
+        const end = st?.endTime || st?.interval?.endTime
         if (!start || !end) return
         const m = (new Date(end) - new Date(start)) / 60000
         if (!Number.isFinite(m)) return

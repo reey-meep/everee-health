@@ -19,6 +19,8 @@ html, body { font-family: 'Plus Jakarta Sans', -apple-system, sans-serif; backgr
   --red: #FF3B5C;
   --sky: #00B4D8;
   --purple: #8B5CF6;
+  --red-l: #FFE9ED;
+  --amber-xl: #FFF4E0;
   --nav: 64px;
 }
 
@@ -77,10 +79,10 @@ html, body { font-family: 'Plus Jakarta Sans', -apple-system, sans-serif; backgr
 
 /* SCORE BUTTONS */
 .score-strip { display: flex; gap: 5px; }
-.score-btn { flex: 1; padding: 9px 2px 7px; border-radius: 9px; border: 1.5px solid var(--bd); background: var(--bg); display: flex; flex-direction: column; align-items: center; gap: 2px; cursor: pointer; transition: all .1s; }
+.score-btn { flex: 1; min-height: 44px; padding: 8px 2px; border-radius: 9px; border: 1.5px solid var(--bd); background: var(--bg); display: flex; flex-direction: column; align-items: center; gap: 2px; cursor: pointer; transition: all .1s; }
 .score-btn.on { border-width: 2px; }
 .score-btn .sn { font-family: var(--mono); font-size: 14px; color: var(--ink3); line-height: 1; }
-.score-btn .sd { font-size: 5.5px; color: var(--ink4); text-align: center; line-height: 1.2; }
+.score-btn .sd { font-size: 9px; letter-spacing: -.2px; color: var(--ink4); text-align: center; line-height: 1.2; }
 .score-btn.on .sn { color: white; }
 .score-btn.on .sd { color: rgba(255,255,255,.7); }
 

@@ -3,7 +3,12 @@ import { getDailyLog, upsertDailyLog, getPracticeLogs, togglePractice, getEpisod
 import { getCurrentPhase, getDayNumber, CYCLE_PHASES, ALL_TASKS, SYMPTOMS, TASK_GROUPS } from '../lib/constants'
 import { fetchDaySnapshot, fetchCurrentWeather, isConnected } from '../lib/google-health'
 
-const TODAY = new Date().toISOString().split('T')[0]
+// Local calendar date, not UTC. Recomputed per call so a PWA left open
+// past midnight rolls over instead of writing to yesterday's key.
+const todayKey = () => {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
 const SYM_COLOR = { dizziness: '#5B5EF4', visual: '#00B4D8', fatigue: '#F0468A', gut: '#00C896', anxiety: '#FF9500' }
 
 function inferPhase(day) {
@@ -63,38 +68,64 @@ export default function Today({ showToast, openMetric, openEpisode }) {
   useEffect(() => { load() }, [])
 
   async function load() {
-    const [l, p, eps] = await Promise.all([getDailyLog(TODAY), getPracticeLogs(TODAY), getEpisodes(3)])
+    const [l, p, eps] = await Promise.all([getDailyLog(todayKey()), getPracticeLogs(todayKey()), getEpisodes(3)])
     if (l) setLog(l)
     const m = {}; p.forEach(x => { m[x.practice_id] = x.completed }); setPractices(m)
     setEpisodes(eps)
-    loadEnv()
+    loadEnv(l || {})
   }
 
-  async function loadEnv() {
+  async function loadEnv(currentLog = {}) {
     try {
       const pos = await new Promise((res, rej) => navigator.geolocation.getCurrentPosition(res, rej, { timeout: 5000 }))
       const w = await fetchCurrentWeather(pos.coords.latitude, pos.coords.longitude)
-      if (w) { setWeather(w); upsertDailyLog(TODAY, { weather_temp: w.temp, weather_pressure: w.pressure }) }
+      if (w) { setWeather(w); upsertDailyLog(todayKey(), { weather_temp: w.temp, weather_pressure: w.pressure }) }
     } catch {}
     if (isConnected()) {
-      const s = await fetchDaySnapshot(TODAY)
-      if (s) { setFitbit(s); if (s.sleep_hours && !log.sleep_hours) upsertDailyLog(TODAY, { sleep_hours: s.sleep_hours }) }
+      const s = await fetchDaySnapshot(todayKey())
+      if (s) { setFitbit(s); if (s.sleep_hours && !currentLog.sleep_hours) upsertDailyLog(todayKey(), { sleep_hours: s.sleep_hours }) }
     }
   }
 
+  // Each of these updates the UI optimistically, then rolls the change back and
+  // tells the user if the write actually failed. Previously a failed save looked
+  // identical to a successful one.
   async function setScore(id, val) {
-    const scores = { ...(log.scores || {}), [id]: log.scores?.[id] === val ? null : val }
-    setLog(l => ({ ...l, scores })); upsertDailyLog(TODAY, { scores })
+    const prev = log.scores || {}
+    const scores = { ...prev, [id]: prev[id] === val ? null : val }
+    setLog(l => ({ ...l, scores }))
+    try {
+      await upsertDailyLog(todayKey(), { scores })
+    } catch {
+      setLog(l => ({ ...l, scores: prev }))
+      showToast('Not saved — check connection', 'var(--red)')
+    }
   }
 
   async function tick(id, done) {
-    setPractices(p => ({ ...p, [id]: done })); togglePractice(TODAY, id, done)
+    setPractices(p => ({ ...p, [id]: done }))
+    try {
+      await togglePractice(todayKey(), id, done)
+    } catch {
+      setPractices(p => ({ ...p, [id]: !done }))
+      showToast('Not saved — check connection', 'var(--red)')
+    }
   }
 
   async function setCycleDay(v) {
+    // cycle_day is an int column: an empty field must send null, not ''.
+    // Sending '' rejected the whole row, silently dropping cycle_phase too.
+    const cycleDay = v === '' || v == null ? null : parseInt(v, 10)
+    if (cycleDay !== null && Number.isNaN(cycleDay)) return
     const ph = inferPhase(v)
-    setLog(l => ({ ...l, cycle_day: v, cycle_phase: ph || l.cycle_phase }))
-    upsertDailyLog(TODAY, { cycle_day: v, cycle_phase: ph })
+    const prev = { cycle_day: log.cycle_day, cycle_phase: log.cycle_phase }
+    setLog(l => ({ ...l, cycle_day: v, cycle_phase: ph }))
+    try {
+      await upsertDailyLog(todayKey(), { cycle_day: cycleDay, cycle_phase: ph })
+    } catch {
+      setLog(l => ({ ...l, ...prev }))
+      showToast('Not saved — check connection', 'var(--red)')
+    }
   }
 
   const scores = log.scores || {}
@@ -122,7 +153,7 @@ export default function Today({ showToast, openMetric, openEpisode }) {
             <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
               <span className="pill" style={{ color: phase.color, borderColor: phase.color + '40', background: phase.color + '12' }}>{phase.name} · Day {day}</span>
               {log.cycle_phase && (
-                <span className="pill" style={{ color: highRisk ? 'var(--red)' : 'var(--pink)', borderColor: highRisk ? 'var(--red)40' : 'var(--pink)30', background: highRisk ? 'var(--red-l)' : '#FEF0F6' }}>
+                <span className="pill" style={{ color: highRisk ? 'var(--red)' : 'var(--pink)', borderColor: highRisk ? 'rgba(255,59,92,0.25)' : 'rgba(240,70,138,0.19)', background: highRisk ? 'var(--red-l)' : '#FEF0F6' }}>
                   {CYCLE_PHASES.find(c => c.id === log.cycle_phase)?.label}{highRisk && ' ⚠'}
                 </span>
               )}
@@ -154,7 +185,7 @@ export default function Today({ showToast, openMetric, openEpisode }) {
           <div className="vitals-strip">
             {[
               { label: 'Steps', value: fitbit.steps?.toLocaleString() ?? '--', color: 'var(--indigo)', sub: `${Math.round(stepPct * 100)}%`, metric: 'steps' },
-              { label: 'Sleep', value: fitbit.sleep_hours ? `${fitbit.sleep_hours}h` : '--', color: fitbit.sleep_hours < 7 ? 'var(--amber)' : 'var(--purple)', metric: 'sleep_hours' },
+              { label: 'Sleep', value: fitbit.sleep_hours ? `${fitbit.sleep_hours}h` : '--', color: (fitbit.sleep_hours != null && fitbit.sleep_hours < 7) ? 'var(--amber)' : 'var(--purple)', metric: 'sleep_hours' },
               { label: 'HR rest', value: fitbit.resting_hr ? Math.round(fitbit.resting_hr) : '--', color: 'var(--red)', metric: 'resting_hr' },
               { label: 'HRV', value: fitbit.hrv ? Math.round(fitbit.hrv) : '--', color: 'var(--sky)', metric: 'hrv' },
             ].map((s, i) => (
@@ -216,7 +247,7 @@ export default function Today({ showToast, openMetric, openEpisode }) {
               {/* Sleep */}
               <div className="widget" style={{ borderTop: '3px solid var(--purple)' }} onClick={() => openMetric({ metric: 'sleep_hours', currentValue: `${fitbit.sleep_hours}h`, ...fitbit })}>
                 <div className="wlbl">Sleep last night</div>
-                <div className="bignum" style={{ color: fitbit.sleep_hours < 7 ? 'var(--amber)' : 'var(--purple)', marginBottom: 8 }}>
+                <div className="bignum" style={{ color: (fitbit.sleep_hours != null && fitbit.sleep_hours < 7) ? 'var(--amber)' : 'var(--purple)', marginBottom: 8 }}>
                   {fitbit.sleep_hours ?? '--'}<span style={{ fontSize: 16, color: 'var(--ink3)' }}>h</span>
                 </div>
                 {fitbit.sleep_stages && (() => {
@@ -235,7 +266,7 @@ export default function Today({ showToast, openMetric, openEpisode }) {
                     </div>
                   )
                 })()}
-                {fitbit.sleep_hours < 7 && <div style={{ marginTop: 8, fontSize: 11.5, color: '#7A4500', background: 'var(--amber-xl)', borderRadius: 8, padding: '6px 10px', fontWeight: 500 }}>Under 7h -- higher symptom sensitivity today.</div>}
+                {fitbit.sleep_hours != null && fitbit.sleep_hours < 7 && <div style={{ marginTop: 8, fontSize: 11.5, color: '#7A4500', background: 'var(--amber-xl)', borderRadius: 8, padding: '6px 10px', fontWeight: 500 }}>Under 7h -- higher symptom sensitivity today.</div>}
               </div>
 
               {/* Vitals */}
@@ -354,7 +385,7 @@ export default function Today({ showToast, openMetric, openEpisode }) {
                   {CYCLE_PHASES.map(cp => (
                     <button key={cp.id} className={`chip${log.cycle_phase === cp.id ? ' on' : ''}`}
                       style={log.cycle_phase === cp.id ? { background: cp.risk ? 'var(--red)' : 'var(--pink)', borderColor: cp.risk ? 'var(--red)' : 'var(--pink)' } : {}}
-                      onClick={() => { const ph = log.cycle_phase === cp.id ? null : cp.id; setLog(l => ({ ...l, cycle_phase: ph })); upsertDailyLog(TODAY, { cycle_phase: ph }) }}>
+                      onClick={() => { const ph = log.cycle_phase === cp.id ? null : cp.id; setLog(l => ({ ...l, cycle_phase: ph })); upsertDailyLog(todayKey(), { cycle_phase: ph }) }}>
                       {cp.label}
                     </button>
                   ))}

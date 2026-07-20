@@ -5,7 +5,12 @@ import { searchFood } from '../lib/google-health'
 
 const MEAL_TYPES = ['Breakfast','Morning snack','Lunch','Afternoon snack','Dinner','Evening snack','Drink']
 const MIN=1500, GOAL=1800
-const TODAY = new Date().toISOString().split('T')[0]
+// Local calendar date, not UTC. Recomputed per call so a PWA left open
+// past midnight rolls over instead of writing to yesterday's key.
+const todayKey = () => {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
 const TRIGGER_CATS = [
   {id:'histamine',label:'Histamine',color:'#FF3B5C'},
   {id:'mast_cell',label:'Mast cell',color:'#F0468A'},
@@ -29,7 +34,7 @@ export default function Food({ showToast }) {
 
   useEffect(()=>{ loadEntries(); loadTriggers() },[])
 
-  async function loadEntries() { setEntries(await getFoodEntries(TODAY)) }
+  async function loadEntries() { setEntries(await getFoodEntries(todayKey())) }
   async function loadTriggers() { const d=await getTriggerFoods(); setTriggers(d.length>0?d:DEFAULT_TRIGGERS) }
 
   function handleQuery(v) {
@@ -53,7 +58,7 @@ export default function Food({ showToast }) {
   async function submit() {
     if (!form.description||!form.meal_type){showToast('Choose type and food','var(--amber)');return}
     const fl=flagged(form.description)
-    await createFoodEntry({date:TODAY,meal_type:form.meal_type,description:form.description,calories:form.calories?parseInt(form.calories):null,protein_grams:form.protein_grams?parseFloat(form.protein_grams):null,dao_taken:form.dao_taken,oxbile_taken:form.oxbile_taken,flagged_triggers:fl,time:new Date().toTimeString().slice(0,5)})
+    await createFoodEntry({date:todayKey(),meal_type:form.meal_type,description:form.description,calories:form.calories?parseInt(form.calories):null,protein_grams:form.protein_grams?parseFloat(form.protein_grams):null,dao_taken:form.dao_taken,oxbile_taken:form.oxbile_taken,flagged_triggers:fl,time:new Date().toTimeString().slice(0,5)})
     if (fl.length) showToast(`⚠ ${fl[0]} on no-go list`,'var(--amber)'); else showToast('Logged')
     setSheet(null); setForm({meal_type:'',description:'',calories:'',protein_grams:'',dao_taken:false,oxbile_taken:false}); setQuery(''); setResults([])
     loadEntries()
@@ -61,7 +66,7 @@ export default function Food({ showToast }) {
 
   async function submitTrigger() {
     if (!tform.food||!tform.trigger_category) return
-    await addTriggerFood({...tform,date_identified:TODAY})
+    await addTriggerFood({...tform,date_identified:todayKey()})
     showToast('Added to no-go list'); setSheet(null); setTform({food:'',trigger_category:'',severity:'',notes:''})
     loadTriggers()
   }
@@ -141,7 +146,7 @@ export default function Food({ showToast }) {
                                 {e.flagged_triggers?.length>0&&<span style={{fontFamily:'var(--mono)',fontSize:9,color:'var(--amber)',background:'var(--amber-l)',padding:'2px 7px',borderRadius:99}}>⚠ {e.flagged_triggers[0]}</span>}
                               </div>
                             </div>
-                            <button onClick={async()=>{await deleteFoodEntry(e.id);loadEntries()}} style={{background:'none',border:'none',color:'var(--ink3)',fontSize:18,cursor:'pointer',paddingLeft:10,flexShrink:0}}>×</button>
+                            <button onClick={async()=>{try{await deleteFoodEntry(e.id)}catch{showToast('Could not delete','var(--red)');return}loadEntries()}} style={{background:'none',border:'none',color:'var(--ink3)',fontSize:18,cursor:'pointer',paddingLeft:10,flexShrink:0}}>×</button>
                           </div>
                         ))}
                       </div>

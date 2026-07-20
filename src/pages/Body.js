@@ -3,7 +3,12 @@ import { getFoodEntries, createFoodEntry, deleteFoodEntry, getTriggerFoods, addT
 import { DEFAULT_TRIGGERS } from '../lib/constants'
 import { searchFood } from '../lib/google-health'
 
-const TODAY = new Date().toISOString().split('T')[0]
+// Local calendar date, not UTC. Recomputed per call so a PWA left open
+// past midnight rolls over instead of writing to yesterday's key.
+const todayKey = () => {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
 const MIN = 1500, GOAL = 1800
 const MEAL_TYPES = ['Breakfast', 'Morning snack', 'Lunch', 'Afternoon snack', 'Dinner', 'Evening snack', 'Drink']
 const TRIGGER_CATS = [{ id: 'histamine', label: 'Histamine', color: '#FF3B5C' }, { id: 'mast_cell', label: 'Mast cell', color: '#F0468A' }, { id: 'oas', label: 'OAS cluster', color: '#FF9500' }, { id: 'intolerance', label: 'Intolerance', color: '#5B5EF4' }, { id: 'lpr', label: 'LPR', color: '#00B4D8' }, { id: 'other', label: 'Other', color: '#A0A6B8' }]
@@ -21,7 +26,7 @@ export default function Body({ showToast }) {
   const searchRef = useRef(null)
 
   useEffect(() => { loadEntries(); loadTriggers() }, [])
-  async function loadEntries() { setEntries(await getFoodEntries(TODAY)) }
+  async function loadEntries() { setEntries(await getFoodEntries(todayKey())) }
   async function loadTriggers() { const d = await getTriggerFoods(); setTriggers(d.length > 0 ? d : DEFAULT_TRIGGERS) }
 
   function handleQuery(v) {
@@ -37,7 +42,13 @@ export default function Body({ showToast }) {
   async function submit() {
     if (!form.description || !form.meal_type) { showToast('Choose type and food', 'var(--amber)'); return }
     const fl = flagged(form.description)
-    await createFoodEntry({ date: TODAY, meal_type: form.meal_type, description: form.description, calories: form.calories ? parseInt(form.calories) : null, protein_grams: form.protein_grams ? parseFloat(form.protein_grams) : null, dao_taken: form.dao_taken, oxbile_taken: form.oxbile_taken, flagged_triggers: fl, time: new Date().toTimeString().slice(0, 5) })
+    try {
+      await createFoodEntry({ date: todayKey(), meal_type: form.meal_type, description: form.description, calories: form.calories ? parseInt(form.calories) : null, protein_grams: form.protein_grams ? parseFloat(form.protein_grams) : null, dao_taken: form.dao_taken, oxbile_taken: form.oxbile_taken, flagged_triggers: fl, time: new Date().toTimeString().slice(0, 5) })
+    } catch {
+      // Keep the sheet open and the form intact so the entry isn't lost.
+      showToast('Not saved — nothing was logged', 'var(--red)')
+      return
+    }
     if (fl.length) showToast(`⚠ ${fl[0]} on no-go list`, 'var(--amber)'); else showToast('Logged')
     setSheet(null); setForm({ meal_type: '', description: '', calories: '', protein_grams: '', dao_taken: false, oxbile_taken: false }); setQuery(''); setResults([])
     loadEntries()
@@ -45,7 +56,13 @@ export default function Body({ showToast }) {
 
   async function submitTrigger() {
     if (!tform.food || !tform.trigger_category) return
-    await addTriggerFood({ ...tform, date_identified: TODAY })
+    try {
+      // severity is optional in the UI, but '' violates the CHECK constraint — send null.
+      await addTriggerFood({ ...tform, severity: tform.severity || null, date_identified: todayKey() })
+    } catch {
+      showToast('Not saved — nothing was added', 'var(--red)')
+      return
+    }
     showToast('Added to no-go list'); setSheet(null); setTform({ food: '', trigger_category: '', severity: '' }); loadTriggers()
   }
 
@@ -98,7 +115,7 @@ export default function Body({ showToast }) {
                               {e.flagged_triggers?.length > 0 && <span className="mono" style={{ fontSize: 9, color: 'var(--amber)', background: '#FFF8ED', padding: '2px 7px', borderRadius: 99, fontWeight: 600 }}>⚠ {e.flagged_triggers[0]}</span>}
                             </div>
                           </div>
-                          <button onClick={async () => { await deleteFoodEntry(e.id); loadEntries() }} style={{ background: 'none', border: 'none', color: 'var(--ink3)', fontSize: 18, cursor: 'pointer', paddingLeft: 10 }}>×</button>
+                          <button onClick={async () => { try { await deleteFoodEntry(e.id) } catch { showToast('Could not delete', 'var(--red)'); return } loadEntries() }} style={{ background: 'none', border: 'none', color: 'var(--ink3)', fontSize: 18, cursor: 'pointer', paddingLeft: 10 }}>×</button>
                         </div>
                       ))}
                     </div>

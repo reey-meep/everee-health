@@ -55,20 +55,20 @@ export const CYCLE_PHASES = [
 
 // Confirmed trigger foods
 export const DEFAULT_TRIGGERS = [
-  { food: 'Gluten', category: 'intolerance', severity: 'severe' },
-  { food: 'Bell peppers', category: 'mast_cell', severity: 'moderate' },
-  { food: 'Lemonade / citric acid', category: 'mast_cell', severity: 'severe' },
-  { food: 'Jalapeños', category: 'mast_cell', severity: 'moderate' },
-  { food: 'Takis', category: 'mast_cell', severity: 'severe' },
-  { food: 'Chocolate', category: 'histamine', severity: 'moderate' },
-  { food: 'Bananas', category: 'oas', severity: 'moderate' },
-  { food: 'Cantaloupe', category: 'oas', severity: 'moderate' },
-  { food: 'Kiwi', category: 'oas', severity: 'moderate' },
-  { food: 'Alcohol', category: 'histamine', severity: 'severe' },
-  { food: 'Leftovers / aged food', category: 'histamine', severity: 'moderate' },
-  { food: 'Artificial fragrances in food', category: 'mast_cell', severity: 'moderate' },
-  { food: 'Peppermint tea', category: 'lpr', severity: 'mild' },
-  { food: 'Tomato sauce', category: 'lpr', severity: 'moderate' },
+  { food: 'Gluten', trigger_category: 'intolerance', severity: 'severe' },
+  { food: 'Bell peppers', trigger_category: 'mast_cell', severity: 'moderate' },
+  { food: 'Lemonade / citric acid', trigger_category: 'mast_cell', severity: 'severe' },
+  { food: 'Jalapeños', trigger_category: 'mast_cell', severity: 'moderate' },
+  { food: 'Takis', trigger_category: 'mast_cell', severity: 'severe' },
+  { food: 'Chocolate', trigger_category: 'histamine', severity: 'moderate' },
+  { food: 'Bananas', trigger_category: 'oas', severity: 'moderate' },
+  { food: 'Cantaloupe', trigger_category: 'oas', severity: 'moderate' },
+  { food: 'Kiwi', trigger_category: 'oas', severity: 'moderate' },
+  { food: 'Alcohol', trigger_category: 'histamine', severity: 'severe' },
+  { food: 'Leftovers / aged food', trigger_category: 'histamine', severity: 'moderate' },
+  { food: 'Artificial fragrances in food', trigger_category: 'mast_cell', severity: 'moderate' },
+  { food: 'Peppermint tea', trigger_category: 'lpr', severity: 'mild' },
+  { food: 'Tomato sauce', trigger_category: 'lpr', severity: 'moderate' },
 ]
 
 // Daily tasks

@@ -20,7 +20,7 @@ export async function upsertDailyLog(date, updates) {
     .upsert({ user_id: USER_ID, date, ...updates }, { onConflict: 'user_id,date' })
     .select()
     .single()
-  if (error) console.error(error)
+  if (error) { console.error(error); throw error }
   return data
 }
 
@@ -42,7 +42,7 @@ export async function togglePractice(date, practiceId, completed) {
       { user_id: USER_ID, date, practice_id: practiceId, completed, completed_at: completed ? new Date().toISOString() : null },
       { onConflict: 'user_id,date,practice_id' }
     )
-  if (error) console.error(error)
+  if (error) { console.error(error); throw error }
 }
 
 // ── EPISODES ────────────────────────────────────────────────
@@ -63,7 +63,7 @@ export async function createEpisode(episode) {
     .insert({ user_id: USER_ID, ...episode })
     .select()
     .single()
-  if (error) console.error(error)
+  if (error) { console.error(error); throw error }
   return data
 }
 
@@ -75,7 +75,7 @@ export async function updateEpisode(id, updates) {
     .eq('user_id', USER_ID)
     .select()
     .single()
-  if (error) console.error(error)
+  if (error) { console.error(error); throw error }
   return data
 }
 
@@ -97,7 +97,7 @@ export async function createFoodEntry(entry) {
     .insert({ user_id: USER_ID, ...entry })
     .select()
     .single()
-  if (error) console.error(error)
+  if (error) { console.error(error); throw error }
   return data
 }
 
@@ -107,7 +107,7 @@ export async function deleteFoodEntry(id) {
     .delete()
     .eq('id', id)
     .eq('user_id', USER_ID)
-  if (error) console.error(error)
+  if (error) { console.error(error); throw error }
 }
 
 // ── TRIGGER FOODS ───────────────────────────────────────────
@@ -128,7 +128,7 @@ export async function addTriggerFood(food) {
     .insert({ user_id: USER_ID, active: true, ...food })
     .select()
     .single()
-  if (error) console.error(error)
+  if (error) { console.error(error); throw error }
   return data
 }
 

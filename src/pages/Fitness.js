@@ -3,7 +3,12 @@ import { getEpisodes, createEpisode, getDailyLog } from '../lib/db'
 import { EPISODE_TYPES } from '../lib/constants'
 import { avgHRInWindow } from '../lib/google-health'
 
-const TODAY = new Date().toISOString().split('T')[0]
+// Local calendar date, not UTC. Recomputed per call so a PWA left open
+// past midnight rolls over instead of writing to yesterday's key.
+const todayKey = () => {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
 const TRIGGERS = ['Gluten','Citric acid','Chocolate','Banana','High fat meal','Late propranolol','Emotional stress','Exercise','Sudden waking','Standing too fast','Gas pressure','Period','Luteal phase','Poor sleep','Unknown']
 const HELPED = ['Famotidine','Propranolol','Valsalva','Cold face','Ginger','Havening','Breathing','Rylie','Rest horizontal','DAO enzyme','Time']
 const SX = ['Flushing','Heart racing','Nausea','Dizziness','Visual disturbance','Exhaustion wave','Presyncope','Panic','Gut cramping','Throat clearing','Chest flutter','Headache','Facial pain']
@@ -19,10 +24,16 @@ export default function Fitness({ showToast, openEpisode }) {
 
   async function submit() {
     if (!form.episode_type || !form.severity) { showToast('Select type and severity', 'var(--amber)'); return }
-    const tl = await getDailyLog(TODAY)
+    const tl = await getDailyLog(todayKey())
     const startMs = new Date(form.started_at).getTime()
     const hr = await avgHRInWindow(startMs, startMs + 30 * 60000).catch(() => null)
-    await createEpisode({ ...form, started_at: new Date(form.started_at).toISOString(), duration_minutes: form.duration_minutes ? parseInt(form.duration_minutes) : null, recovery_minutes: form.recovery_minutes ? parseInt(form.recovery_minutes) : null, cycle_phase_at_episode: tl?.cycle_phase || null, weather_pressure_at_episode: tl?.weather_pressure || null, heart_rate_during: hr })
+    try {
+      await createEpisode({ ...form, started_at: new Date(form.started_at).toISOString(), duration_minutes: form.duration_minutes ? parseInt(form.duration_minutes) : null, recovery_minutes: form.recovery_minutes ? parseInt(form.recovery_minutes) : null, cycle_phase_at_episode: tl?.cycle_phase || null, weather_pressure_at_episode: tl?.weather_pressure || null, heart_rate_during: hr })
+    } catch {
+      // Episode details are hard to reconstruct after the fact — keep the form.
+      showToast('Not saved — episode not logged', 'var(--red)')
+      return
+    }
     showToast('Episode logged'); setSheet(false)
     setForm({ episode_type: '', severity: null, started_at: new Date().toISOString().slice(0, 16), duration_minutes: '', triggers: [], symptoms_present: [], what_helped: [], recovery_minutes: '' })
     load()

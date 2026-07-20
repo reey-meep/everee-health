@@ -1,0 +1,9 @@
+{
+  "short_name": "everee health",
+  "name": "everee health",
+  "display": "standalone",
+  "background_color": "#0F0F1A",
+  "theme_color": "#0F0F1A",
+  "start_url": ".",
+  "orientation": "portrait"
+}

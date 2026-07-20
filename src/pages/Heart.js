@@ -109,8 +109,8 @@ export default function Heart({ showToast }) {
 
   return (
     <div className="view">
-      <div className="hero">
-        <div className="eyebrow">everee health · Heart</div>
+      <div style={{ background: 'var(--bg)', borderBottom: 'var(--border)', padding: '52px 16px 20px', marginBottom: 14 }}>
+        <div className="label" style={{ marginBottom: 4 }}>Heart monitor</div>
         <h1>Heart monitor</h1>
         <p>Your view is always safe. No numbers ever. Rylie's view has the full data.</p>
       </div>
@@ -138,7 +138,7 @@ export default function Heart({ showToast }) {
           {/* TAG BUTTON -- always visible */}
           <button
             onClick={() => setShowTagModal(true)}
-            style={{ width: '100%', marginBottom: 10, padding: '11px', borderRadius: 'var(--r)', border: '1.5px solid var(--bd)', background: 'var(--s1)', color: 'var(--ink2)', fontSize: 12.5, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
+            style={{ width: '100%', marginBottom: 10, padding: '11px', borderRadius: 'var(--r)', border: '1.5px solid var(--bd)', background: 'var(--bg)', color: 'var(--ink2)', fontSize: 12.5, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
           >
             <span style={{ fontSize: 16 }}>★</span> Tag this moment
           </button>
@@ -227,7 +227,7 @@ export default function Heart({ showToast }) {
       {mode === 'rylie' && (
         <>
           {/* RYLIE TABS */}
-          <div style={{ display: 'flex', background: 'var(--s1)', border: 'var(--border)', borderRadius: 10, padding: 3, marginBottom: 12, gap: 3 }}>
+          <div style={{ display: 'flex', background: 'var(--bg)', border: 'var(--border)', borderRadius: 10, padding: 3, marginBottom: 12, gap: 3 }}>
             {RYLIE_TABS.map(t => (
               <button key={t} onClick={() => setActiveTab(t)}
                 style={{ flex: 1, padding: '7px 4px', borderRadius: 7, border: 'none', background: activeTab === t ? 'var(--s2)' : 'none', color: activeTab === t ? 'var(--ink)' : 'var(--ink3)', fontFamily: 'var(--mono)', fontSize: 10.5, cursor: 'pointer' }}>
@@ -307,7 +307,7 @@ export default function Heart({ showToast }) {
                             <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
                               <span style={{ fontSize: 14 }}>{cat.icon}</span>
                               <span style={{ fontSize: 12.5, color: cat.color || 'var(--ink)' }}>{tag.label}</span>
-                              {tag.heart_rate_at_tag && <span style={{ fontFamily: 'var(--mono)', fontSize: 9, color: 'var(--ink3)', background: 'var(--s2)', padding: '1px 6px', borderRadius: 99 }}>{tag.heart_rate_at_tag} bpm</span>}
+                              {tag.heart_rate_at_tag && <span style={{ fontFamily: 'var(--mono)', fontSize: 9, color: 'var(--ink3)', background: 'var(--s1)', padding: '1px 6px', borderRadius: 99 }}>{tag.heart_rate_at_tag} bpm</span>}
                             </div>
                             {tag.notes && <div style={{ fontSize: 11, color: 'var(--ink3)', marginLeft: 20 }}>{tag.notes}</div>}
                             <div style={{ fontFamily: 'var(--mono)', fontSize: 8.5, color: 'var(--ink3)', marginLeft: 20, marginTop: 2 }}>

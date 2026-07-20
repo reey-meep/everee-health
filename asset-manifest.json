@@ -1,13 +1,13 @@
 {
   "files": {
     "main.css": "/everee-health/static/css/main.53fdd09b.css",
-    "main.js": "/everee-health/static/js/main.b6068fb7.js",
+    "main.js": "/everee-health/static/js/main.f686007b.js",
     "index.html": "/everee-health/index.html",
     "main.53fdd09b.css.map": "/everee-health/static/css/main.53fdd09b.css.map",
-    "main.b6068fb7.js.map": "/everee-health/static/js/main.b6068fb7.js.map"
+    "main.f686007b.js.map": "/everee-health/static/js/main.f686007b.js.map"
   },
   "entrypoints": [
     "static/css/main.53fdd09b.css",
-    "static/js/main.b6068fb7.js"
+    "static/js/main.f686007b.js"
   ]
 }

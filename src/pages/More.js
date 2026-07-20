@@ -1,9 +1,23 @@
 import { runAllAnalytics } from '../lib/analytics'
 import { useState, useEffect } from 'react'
+import {
+  getAuthUrl, isConnected, clearToken,
+  fetchDaySnapshot, getDebugLog, clearDebugLog,
+} from '../lib/google-health'
+
+const todayKey = () => {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
 
 export default function More({ showToast, openMetric }) {
   const [insights, setInsights] = useState([])
   const [loading, setLoading] = useState(true)
+  const [connected, setConnected] = useState(isConnected())
+  const [syncing, setSyncing] = useState(false)
+  const [snapshot, setSnapshot] = useState(null)
+  const [showDebug, setShowDebug] = useState(false)
+  const [log, setLog] = useState([])
 
   useEffect(() => {
     runAllAnalytics().then(r => {
@@ -11,6 +25,31 @@ export default function More({ showToast, openMetric }) {
       setLoading(false)
     }).catch(() => setLoading(false))
   }, [])
+
+  // Runs a real snapshot and shows exactly what came back, so a failure is
+  // visible as a status code rather than an empty screen.
+  async function syncNow() {
+    setSyncing(true)
+    clearDebugLog()
+    try {
+      const s = await fetchDaySnapshot(todayKey())
+      setSnapshot(s)
+      const got = Object.entries(s).filter(([k, v]) => v != null && k !== 'hr_points').length
+      showToast(got ? `Synced — ${got} metrics` : 'Connected, but no data returned', got ? 'var(--green)' : 'var(--amber)')
+    } catch (e) {
+      showToast('Sync failed', 'var(--red)')
+    }
+    setLog(getDebugLog())
+    setShowDebug(true)
+    setSyncing(false)
+  }
+
+  function disconnect() {
+    clearToken()
+    setConnected(false)
+    setSnapshot(null)
+    showToast('Disconnected')
+  }
 
   return (
     <div className="screen active">
@@ -35,21 +74,97 @@ export default function More({ showToast, openMetric }) {
           </div>
         ))}
 
-        <div className="section-label" style={{ marginTop: 4 }}>Settings</div>
+        {/* ── FITBIT / GOOGLE HEALTH ───────────────────────── */}
+        <div className="section-label" style={{ marginTop: 4 }}>Fitbit</div>
+        <div className="card" style={{ padding: 16 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+            <span style={{ width: 8, height: 8, borderRadius: 4, background: connected ? 'var(--green)' : 'var(--ink4)' }} />
+            <div style={{ fontSize: 13.5, fontWeight: 700 }}>{connected ? 'Connected' : 'Not connected'}</div>
+          </div>
+          <div style={{ fontSize: 12, color: 'var(--ink2)', lineHeight: 1.55, marginBottom: 12 }}>
+            {connected
+              ? 'Pull today’s steps, sleep, resting HR, HRV and SpO2 from Google Health.'
+              : 'Link your Google account to pull steps, sleep, resting HR, HRV and SpO2 automatically.'}
+          </div>
+
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            {!connected && (
+              <button
+                onClick={() => { window.location.href = getAuthUrl() }}
+                style={{ minHeight: 44, padding: '0 16px', borderRadius: 10, border: 'none', background: 'var(--indigo)', color: '#fff', fontSize: 13.5, fontWeight: 600, cursor: 'pointer' }}>
+                Connect Fitbit
+              </button>
+            )}
+            {connected && (
+              <>
+                <button
+                  onClick={syncNow} disabled={syncing}
+                  style={{ minHeight: 44, padding: '0 16px', borderRadius: 10, border: 'none', background: 'var(--indigo)', color: '#fff', fontSize: 13.5, fontWeight: 600, cursor: 'pointer', opacity: syncing ? .6 : 1 }}>
+                  {syncing ? 'Syncing…' : 'Sync now'}
+                </button>
+                <button
+                  onClick={disconnect}
+                  style={{ minHeight: 44, padding: '0 16px', borderRadius: 10, border: '1.5px solid var(--bd)', background: 'var(--bg)', color: 'var(--ink2)', fontSize: 13.5, fontWeight: 600, cursor: 'pointer' }}>
+                  Disconnect
+                </button>
+              </>
+            )}
+          </div>
+
+          {snapshot && (
+            <div style={{ marginTop: 14, borderTop: '1px solid var(--bd)', paddingTop: 12 }}>
+              <div className="eyebrow" style={{ marginBottom: 8 }}>Today&rsquo;s values</div>
+              {Object.entries(snapshot)
+                .filter(([k]) => k !== 'hr_points' && k !== 'sleep_stages')
+                .map(([k, v]) => (
+                  <div key={k} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, padding: '3px 0' }}>
+                    <span style={{ color: 'var(--ink3)' }}>{k}</span>
+                    <span className="mono" style={{ color: v == null ? 'var(--ink4)' : 'var(--ink)' }}>{v == null ? '—' : String(v)}</span>
+                  </div>
+                ))}
+            </div>
+          )}
+        </div>
+
+        {/* ── DEBUG ────────────────────────────────────────── */}
+        {log.length > 0 && (
+          <>
+            <div className="section-label" style={{ marginTop: 4 }}>
+              API debug
+              <a onClick={() => setShowDebug(v => !v)} style={{ cursor: 'pointer' }}>{showDebug ? 'Hide' : 'Show'}</a>
+            </div>
+            {showDebug && (
+              <div className="card" style={{ padding: 12 }}>
+                {log.map((e, i) => (
+                  <div key={i} style={{ borderBottom: i < log.length - 1 ? '1px solid var(--bd)' : 'none', padding: '6px 0' }}>
+                    <div className="mono" style={{ fontSize: 9.5, color: e.ok ? 'var(--green)' : 'var(--red)', fontWeight: 600 }}>
+                      {e.method} {e.status || 'ERR'} {e.ok ? 'OK' : 'FAIL'}
+                    </div>
+                    <div className="mono" style={{ fontSize: 9, color: 'var(--ink3)', wordBreak: 'break-all', marginTop: 2 }}>{e.path}</div>
+                    {e.error && <div className="mono" style={{ fontSize: 9, color: 'var(--red)', marginTop: 3, wordBreak: 'break-word' }}>{e.error}</div>}
+                    {e.sample && <div className="mono" style={{ fontSize: 8.5, color: 'var(--ink2)', marginTop: 3, wordBreak: 'break-all' }}>{e.sample}</div>}
+                  </div>
+                ))}
+              </div>
+            )}
+          </>
+        )}
+
+        {/* ── NOT YET BUILT ────────────────────────────────── */}
+        <div className="section-label" style={{ marginTop: 4 }}>Not yet built</div>
         <div className="card">
           {[
-            { label: 'Connect Fitbit', sub: 'Link your Fitbit for automatic data' },
             { label: 'Heart monitor', sub: 'Rylie mode + HR tracking' },
             { label: 'Medications', sub: 'View your full medication list' },
             { label: 'Wellness plan', sub: 'Foundation phase protocol' },
             { label: 'Analytics', sub: 'Full correlation dashboard' },
           ].map((item, i, arr) => (
-            <div key={item.label} className="row" style={{ borderBottom: i < arr.length - 1 ? '1px solid var(--bd)' : 'none' }}>
+            <div key={item.label} className="row" style={{ borderBottom: i < arr.length - 1 ? '1px solid var(--bd)' : 'none', opacity: .5 }}>
               <div style={{ flex: 1 }}>
                 <div style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--ink)' }}>{item.label}</div>
                 {item.sub && <div style={{ fontSize: 11.5, color: 'var(--ink3)', marginTop: 2 }}>{item.sub}</div>}
               </div>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--ink4)" strokeWidth="2"><polyline points="9 18 15 12 9 6"/></svg>
+              <span className="mono" style={{ fontSize: 9, color: 'var(--ink4)' }}>SOON</span>
             </div>
           ))}
         </div>

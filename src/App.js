@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import Today from './pages/Today'
 import Fitness from './pages/Fitness'
 import Body from './pages/Body'
@@ -6,6 +6,7 @@ import More from './pages/More'
 import MetricDetail from './pages/MetricDetail'
 import EpisodeDetail from './pages/EpisodeDetail'
 import Toast from './components/Toast'
+import { handleAuthRedirect } from './lib/google-health'
 
 const TABS = [
   { id: 'today', label: 'Today', icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> },
@@ -18,10 +19,19 @@ export default function App() {
   const [tab, setTab] = useState('today')
   const [detail, setDetail] = useState(null) // { type: 'metric'|'episode', data }
   const [toast, setToast] = useState(null)
+  const toastTimer = useRef(null)
+
+  // Consume #access_token=... when Google redirects back after consent.
+  // Without this the token was dropped and the app reported "not connected" forever.
+  useEffect(() => {
+    if (handleAuthRedirect()) showToast('Fitbit connected', 'var(--green)')
+  }, [])
 
   function showToast(msg, color) {
-    setToast({ msg, color })
-    setTimeout(() => setToast(null), 2500)
+    // Clear any pending timer so a second toast isn't cut short by the first.
+    if (toastTimer.current) clearTimeout(toastTimer.current)
+    setToast({ msg, color, id: Date.now() })
+    toastTimer.current = setTimeout(() => setToast(null), 2500)
   }
 
   function openMetric(data) { setDetail({ type: 'metric', data }) }
@@ -60,7 +70,7 @@ export default function App() {
         </nav>
       )}
 
-      {toast && <Toast message={toast.msg} color={toast.color} />}
+      {toast && <Toast key={toast.id} message={toast.msg} color={toast.color} />}
     </>
   )
 }

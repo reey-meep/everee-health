@@ -1,222 +1,291 @@
-const CLIENT_ID = process.env.REACT_APP_GOOGLE_CLIENT_ID || '777031835250-hvhmbb63opkntprba4s373abdrmo3mm4.apps.googleusercontent.com'
-const REDIRECT_URI = window.location.origin + window.location.pathname
+// Google Health API v4 client.
+//
+// This file previously targeted the Google Fit v1 REST shapes (`value[0].fpVal`,
+// GET `:dailyRollUp` with query params, response key `dataPoints`). None of that
+// exists in Health API v4, so every metric resolved to null while errors were
+// swallowed -- which presented as "connected but no data".
+//
+// Verified against:
+//   https://developers.google.com/health/reference/rest/v4/users.dataTypes.dataPoints
+//   https://developers.google.com/health/reference/rest/v4/users.dataTypes.dataPoints/list
+//   https://developers.google.com/health/reference/rest/v4/users.dataTypes.dataPoints/dailyRollUp
+//   https://developers.google.com/health/scopes
 
+const CLIENT_ID = process.env.REACT_APP_GOOGLE_CLIENT_ID
+  || '777031835250-sadrm1559ahp1ntjcqoghgkm3d32fi2o.apps.googleusercontent.com'
+
+// Registered redirect URI is the directory form with a trailing slash. Landing on
+// /everee-health (no slash) would otherwise produce a redirect_uri_mismatch.
+const REDIRECT_URI = (() => {
+  const path = window.location.pathname.endsWith('/')
+    ? window.location.pathname
+    : window.location.pathname + '/'
+  return window.location.origin + path
+})()
+
+// v4 scopes are functional bundles under .../auth/googlehealth.*, not per-metric.
 const SCOPES = [
-  'https://www.googleapis.com/auth/health.heart_rate.read',
-  'https://www.googleapis.com/auth/health.heart_rate_variability.read',
-  'https://www.googleapis.com/auth/health.sleep.read',
-  'https://www.googleapis.com/auth/health.activity.read',
-  'https://www.googleapis.com/auth/health.oxygen_saturation.read',
-  'https://www.googleapis.com/auth/health.respiratory_rate.read',
+  'https://www.googleapis.com/auth/googlehealth.activity_and_fitness.readonly',
+  'https://www.googleapis.com/auth/googlehealth.health_metrics_and_measurements.readonly',
+  'https://www.googleapis.com/auth/googlehealth.sleep.readonly',
 ].join(' ')
 
+const TOKEN_KEY = 'gh_access_token'
+const EXPIRY_KEY = 'gh_token_expiry'
+
+// ── AUTH ──────────────────────────────────────────────────
 export function getAuthUrl() {
   const params = new URLSearchParams({
-    client_id: CLIENT_ID, redirect_uri: REDIRECT_URI,
-    response_type: 'code', scope: SCOPES,
-    access_type: 'offline', prompt: 'consent',
+    client_id: CLIENT_ID,
+    redirect_uri: REDIRECT_URI,
+    // Implicit flow: a static GitHub Pages SPA cannot hold a client secret,
+    // so there is no way to exchange an auth code.
+    response_type: 'token',
+    scope: SCOPES,
+    include_granted_scopes: 'true',
+    prompt: 'consent',
   })
   return `https://accounts.google.com/o/oauth2/v2/auth?${params}`
 }
 
-export const isConnected = () => !!localStorage.getItem('gh_access_token')
-export const getToken = () => localStorage.getItem('gh_access_token')
-export const setToken = t => localStorage.setItem('gh_access_token', t)
-export const clearToken = () => localStorage.removeItem('gh_access_token')
+export const getToken = () => {
+  const t = localStorage.getItem(TOKEN_KEY)
+  if (!t) return null
+  const exp = parseInt(localStorage.getItem(EXPIRY_KEY) || '0', 10)
+  // Implicit-flow tokens last ~1h. Treat an expired token as absent rather than
+  // reporting "connected" while every request 401s.
+  if (exp && Date.now() > exp) { clearToken(); return null }
+  return t
+}
+export const isConnected = () => !!getToken()
+export const setToken = (t, expiresInSec) => {
+  localStorage.setItem(TOKEN_KEY, t)
+  if (expiresInSec) localStorage.setItem(EXPIRY_KEY, String(Date.now() + expiresInSec * 1000))
+}
+export const clearToken = () => {
+  localStorage.removeItem(TOKEN_KEY)
+  localStorage.removeItem(EXPIRY_KEY)
+}
 
-async function gh(path) {
+// Call once on mount. Consumes #access_token=... from the OAuth redirect.
+export function handleAuthRedirect() {
+  const hash = window.location.hash.substring(1)
+  if (!hash) return false
+  const p = new URLSearchParams(hash)
+  const token = p.get('access_token')
+  if (!token) return false
+  setToken(token, parseInt(p.get('expires_in') || '3600', 10))
+  window.history.replaceState({}, document.title, window.location.pathname)
+  return true
+}
+
+// ── DEBUG LOG ─────────────────────────────────────────────
+// Every request is recorded so failures are inspectable instead of silent.
+// Surfaced in the More tab.
+const DEBUG_MAX = 40
+let debugLog = []
+const record = e => { debugLog = [{ at: new Date().toISOString(), ...e }, ...debugLog].slice(0, DEBUG_MAX) }
+export const getDebugLog = () => debugLog
+export const clearDebugLog = () => { debugLog = [] }
+
+// ── TRANSPORT ─────────────────────────────────────────────
+// Returns { ok, status, data, error }. Never returns a bare null, so callers can
+// tell "no data" apart from "request failed".
+async function ghFetch(path, { method = 'GET', body = null } = {}) {
   const token = getToken()
-  if (!token) return null
+  if (!token) {
+    const r = { ok: false, status: 0, data: null, error: 'not connected' }
+    record({ path, method, ...r })
+    return r
+  }
   try {
     const res = await fetch(`https://health.googleapis.com/v4/${path}`, {
-      headers: { Authorization: `Bearer ${token}` }
+      method,
+      headers: {
+        Authorization: `Bearer ${token}`,
+        ...(body ? { 'Content-Type': 'application/json' } : {}),
+      },
+      ...(body ? { body: JSON.stringify(body) } : {}),
     })
-    if (!res.ok) return null
-    return await res.json()
-  } catch { return null }
+    const text = await res.text()
+    let json = null
+    try { json = text ? JSON.parse(text) : null } catch { /* non-JSON error body */ }
+
+    if (res.status === 401) clearToken()
+    if (!res.ok) {
+      const error = json?.error?.message || text.slice(0, 200) || `HTTP ${res.status}`
+      record({ path, method, ok: false, status: res.status, error })
+      return { ok: false, status: res.status, data: null, error }
+    }
+    record({ path, method, ok: true, status: res.status, sample: JSON.stringify(json).slice(0, 400) })
+    return { ok: true, status: res.status, data: json, error: null }
+  } catch (e) {
+    const error = String(e?.message || e)
+    record({ path, method, ok: false, status: 0, error })
+    return { ok: false, status: 0, data: null, error }
+  }
 }
 
-// Generic rollup fetcher for daily aggregate types
-async function dailyRollup(dataType, date) {
-  const start = `${date}T00:00:00Z`
-  const end = `${date}T23:59:59Z`
-  return gh(`users/me/dataTypes/${dataType}:dailyRollUp?startTime=${start}&endTime=${end}`)
+// ── REQUEST BUILDERS ──────────────────────────────────────
+const civil = dateStr => {
+  const [year, month, day] = dateStr.split('-').map(Number)
+  return { year, month, day }
+}
+const addDays = (dateStr, n) => {
+  const [y, m, d] = dateStr.split('-').map(Number)
+  const dt = new Date(Date.UTC(y, m - 1, d + n))
+  return `${dt.getUTCFullYear()}-${String(dt.getUTCMonth() + 1).padStart(2, '0')}-${String(dt.getUTCDate()).padStart(2, '0')}`
 }
 
-// Generic data points fetcher
-async function dataPoints(dataType, startTime, endTime, pageSize = 500) {
-  return gh(`users/me/dataTypes/${dataType}/dataPoints?startTime=${startTime}&endTime=${endTime}&pageSize=${pageSize}`)
+// POST {parent}/dataPoints:dailyRollUp with a civil-date range.
+// Response: { rollupDataPoints: [ { civilStartTime, civilEndTime, <dataType>: {...} } ] }
+async function rollupDaily(dataType, date) {
+  const r = await ghFetch(`users/me/dataTypes/${dataType}/dataPoints:dailyRollUp`, {
+    method: 'POST',
+    body: { range: { start: civil(date), end: civil(addDays(date, 1)) }, windowSizeDays: 1 },
+  })
+  return r.ok ? (r.data?.rollupDataPoints || []) : []
 }
 
-function avgPoints(data) {
-  const pts = data?.dataPoints || []
-  if (!pts.length) return null
-  const vals = pts.map(p => p?.value?.[0]?.fpVal || p?.value?.[0]?.intVal).filter(v => v != null)
-  return vals.length ? Math.round(vals.reduce((a,b) => a+b, 0) / vals.length * 10) / 10 : null
+// GET {parent}/dataPoints?filter=...  Response: { dataPoints: [...], nextPageToken }
+async function listPoints(dataType, filter, pageSize = 1440) {
+  const qs = new URLSearchParams({ pageSize: String(pageSize) })
+  if (filter) qs.set('filter', filter)
+  const r = await ghFetch(`users/me/dataTypes/${dataType}/dataPoints?${qs}`)
+  return r.ok ? (r.data?.dataPoints || []) : []
 }
 
-function sumPoints(data) {
-  const pts = data?.dataPoints || []
-  if (!pts.length) return null
-  const vals = pts.map(p => p?.value?.[0]?.fpVal || p?.value?.[0]?.intVal).filter(v => v != null)
-  return vals.length ? Math.round(vals.reduce((a,b) => a+b, 0)) : null
+const dayFilter = (dataType, field, date) =>
+  `${dataType}.${field} >= "${date}" AND ${dataType}.${field} < "${addDays(date, 1)}"`
+
+const num = v => (typeof v === 'number' ? v : v == null ? null : Number(v))
+const round = (v, dp = 0) => (v == null || Number.isNaN(v) ? null : Math.round(v * 10 ** dp) / 10 ** dp)
+
+// ── HEART RATE ────────────────────────────────────────────
+export async function fetchHeartRatePoints(date) {
+  return listPoints('heart-rate', dayFilter('heart-rate', 'sample_time.civil_time', date), 10000)
 }
 
-// ── LIVE HEART RATE ──────────────────────────────────────
-export async function fetchHeartRate(startTime, endTime) {
-  const start = startTime || new Date(Date.now() - 3600000).toISOString()
-  const end = endTime || new Date().toISOString()
-  return dataPoints('heart-rate', start, end)
-}
+const hrValue = p => num(p?.heartRate?.beatsPerMinute)
+const hrTime = p => p?.heartRate?.sampleTime?.physicalTime || p?.heartRate?.sampleTime?.civilTime || null
 
 export async function fetchCurrentHeartRate() {
-  const data = await fetchHeartRate(
-    new Date(Date.now() - 300000).toISOString(),
-    new Date().toISOString()
-  )
-  if (!data?.dataPoints?.length) return null
-  const latest = data.dataPoints[data.dataPoints.length - 1]
-  return latest?.value?.[0]?.fpVal || null
+  const now = new Date()
+  const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+  const pts = await fetchHeartRatePoints(today)
+  const vals = pts.map(hrValue).filter(v => v != null)
+  return vals.length ? vals[vals.length - 1] : null
+}
+
+// Back-compat shim: PropranololAnalytics.js (currently unreachable from App.js)
+// still imports this. Returns the v4 point list under the old wrapper shape.
+export async function fetchHeartRate(startTime) {
+  const d = startTime ? new Date(startTime) : new Date()
+  const date = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+  return { dataPoints: await fetchHeartRatePoints(date) }
 }
 
 export async function avgHRInWindow(startMs, endMs) {
-  const data = await fetchHeartRate(new Date(startMs).toISOString(), new Date(endMs).toISOString())
-  return avgPoints(data)
+  const d = new Date(startMs)
+  const date = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+  const pts = await fetchHeartRatePoints(date)
+  const vals = pts
+    .filter(p => { const t = new Date(hrTime(p)).getTime(); return t >= startMs && t <= endMs })
+    .map(hrValue)
+    .filter(v => v != null)
+  return vals.length ? round(vals.reduce((a, b) => a + b, 0) / vals.length, 1) : null
 }
 
-// ── FULL DAY SNAPSHOT ────────────────────────────────────
+// ── FULL DAY SNAPSHOT ─────────────────────────────────────
 export async function fetchDaySnapshot(date) {
-  const start = `${date}T00:00:00Z`
-  const end = `${date}T23:59:59Z`
-
-  // Parallel fetch everything
   const [
-    sleepData, hrData, hrvData, spo2Data, respData,
-    stepsData, distanceData, floorsData,
-    totalCalData, activeCalData, activeMinData,
-    activeZoneData, restingHrData, vo2Data,
-    hrZonesData, activityData,
+    stepsRoll, distanceRoll, floorsRoll, azmRoll,
+    restingRoll, hrvRoll, spo2Roll, respRoll,
+    hrPoints, sleepPoints,
   ] = await Promise.all([
-    dataPoints('sleep', start, end, 20),
-    dataPoints('heart-rate', start, end, 1000),
-    dailyRollup('daily-heart-rate-variability', date),
-    dailyRollup('daily-oxygen-saturation', date),
-    dailyRollup('daily-respiratory-rate', date),
-    dailyRollup('steps', date),
-    dailyRollup('distance', date),
-    dailyRollup('floors', date),
-    dailyRollup('total-calories', date),
-    dailyRollup('active-energy-burned', date),
-    dailyRollup('active-minutes', date),
-    dailyRollup('active-zone-minutes', date),
-    dailyRollup('daily-resting-heart-rate', date),
-    dailyRollup('run-vo2-max', date),
-    dailyRollup('daily-heart-rate-zones', date),
-    dataPoints('activity', start, end, 50),
+    rollupDaily('steps', date),
+    rollupDaily('distance', date),
+    rollupDaily('floors', date),
+    rollupDaily('active-zone-minutes', date),
+    rollupDaily('daily-resting-heart-rate', date),
+    rollupDaily('heart-rate-variability', date),
+    rollupDaily('oxygen-saturation', date),
+    rollupDaily('daily-respiratory-rate', date),
+    fetchHeartRatePoints(date),
+    listPoints('sleep', dayFilter('sleep', 'interval.civil_end_time', date), 25),
   ])
 
-  // Sleep processing
-  let sleep_hours = null, sleep_stages = null
-  if (sleepData?.dataPoints?.length) {
-    const totalMs = sleepData.dataPoints.reduce((s, p) => s + (new Date(p.endTime) - new Date(p.startTime)), 0)
-    sleep_hours = Math.round(totalMs / 3600000 * 10) / 10
+  const first = (rows, pick) => {
+    for (const r of rows) { const v = pick(r); if (v != null) return num(v) }
+    return null
+  }
+
+  // Sleep: prefer the API's own summary, fall back to summing stage durations.
+  let sleep_hours = null
+  let sleep_stages = null
+  if (sleepPoints.length) {
+    const mins = sleepPoints.reduce((s, p) => s + (num(p?.sleep?.summary?.minutesAsleep) || 0), 0)
+    if (mins > 0) sleep_hours = round(mins / 60, 1)
+
     const stages = { deep: 0, light: 0, rem: 0, awake: 0 }
-    sleepData.dataPoints.forEach(p => {
-      const stage = p?.value?.[0]?.intVal
-      const mins = (new Date(p.endTime) - new Date(p.startTime)) / 60000
-      if (stage === 1) stages.awake += mins
-      else if (stage === 2) stages.light += mins
-      else if (stage === 3) stages.deep += mins
-      else if (stage === 4) stages.rem += mins
+    let sawStage = false
+    sleepPoints.forEach(p => {
+      (p?.sleep?.stages || []).forEach(st => {
+        const start = st?.interval?.startTime, end = st?.interval?.endTime
+        if (!start || !end) return
+        const m = (new Date(end) - new Date(start)) / 60000
+        if (!Number.isFinite(m)) return
+        const type = String(st?.type || st?.stage || '').toUpperCase()
+        sawStage = true
+        if (type.includes('DEEP')) stages.deep += m
+        else if (type.includes('REM')) stages.rem += m
+        else if (type.includes('AWAKE') || type.includes('WAKE')) stages.awake += m
+        else stages.light += m
+      })
     })
-    sleep_stages = stages
-  }
-
-  // HR processing
-  const hrPoints = hrData?.dataPoints || []
-  const resting_hr = restingHrData?.dataPoints?.[0]?.value?.[0]?.fpVal
-    || (hrPoints.length ? Math.round(Math.min(...hrPoints.map(p => p?.value?.[0]?.fpVal).filter(Boolean))) : null)
-  const peak_hr = hrPoints.length ? Math.round(Math.max(...hrPoints.map(p => p?.value?.[0]?.fpVal).filter(Boolean))) : null
-  const avg_hr = avgPoints(hrData)
-
-  // HR zones
-  let hr_zones = null
-  if (hrZonesData?.dataPoints?.length) {
-    const z = hrZonesData.dataPoints[0]?.value
-    if (z) hr_zones = {
-      out_of_range: Math.round(z[0]?.fpVal || 0),
-      fat_burn: Math.round(z[1]?.fpVal || 0),
-      cardio: Math.round(z[2]?.fpVal || 0),
-      peak: Math.round(z[3]?.fpVal || 0),
+    if (sawStage) {
+      sleep_stages = Object.fromEntries(Object.entries(stages).map(([k, v]) => [k, Math.round(v)]))
+      if (sleep_hours == null) {
+        sleep_hours = round((stages.deep + stages.light + stages.rem) / 60, 1)
+      }
     }
   }
 
-  // Activity processing
-  const WALK_TYPES = ['WALKING', 'OUTDOOR_WALK', 'TREADMILL_WALKING']
-  const WEIGHT_TYPES = ['WEIGHT_TRAINING', 'STRENGTH_TRAINING']
-  const activities = activityData?.dataPoints || []
-  const walks = activities.filter(a => WALK_TYPES.includes(a.activityType))
-  const weights = activities.filter(a => WEIGHT_TYPES.includes(a.activityType))
-  const walk_minutes = Math.round(walks.reduce((s, a) => s + (new Date(a.endTime) - new Date(a.startTime)) / 60000, 0))
-
-  // Steps
-  const steps = stepsData?.dataPoints?.[0]?.value?.[0]?.intVal
-    || sumPoints(await dataPoints('steps', start, end, 1000))
-
-  // Active zone minutes (cardio load proxy)
-  let active_zone_minutes = null, cardio_minutes = null
-  if (activeZoneData?.dataPoints?.length) {
-    const v = activeZoneData.dataPoints[0]?.value
-    if (v) {
-      const fat_burn = v[0]?.intVal || 0
-      const cardio = v[1]?.intVal || 0
-      const peak = v[2]?.intVal || 0
-      active_zone_minutes = fat_burn + cardio + peak
-      cardio_minutes = cardio + peak
-    }
-  }
+  const hrVals = hrPoints.map(hrValue).filter(v => v != null)
+  const steps = first(stepsRoll, r => r?.steps?.count)
+  const distance_mm = first(distanceRoll, r => r?.distance?.millimeters)
+  const azm = first(azmRoll, r => r?.activeZoneMinutes?.activeZoneMinutes)
 
   return {
     // Activity
-    steps: steps || null,
-    distance_km: distanceData?.dataPoints?.[0]?.value?.[0]?.fpVal
-      ? Math.round(distanceData.dataPoints[0].value[0].fpVal / 100) / 10 : null,
-    floors: floorsData?.dataPoints?.[0]?.value?.[0]?.intVal || null,
-    active_minutes: activeMinData?.dataPoints?.[0]?.value?.[0]?.intVal || null,
-    active_zone_minutes,
-    cardio_minutes,
-    total_calories_burned: totalCalData?.dataPoints?.[0]?.value?.[0]?.fpVal
-      ? Math.round(totalCalData.dataPoints[0].value[0].fpVal) : null,
-    active_calories_burned: activeCalData?.dataPoints?.[0]?.value?.[0]?.fpVal
-      ? Math.round(activeCalData.dataPoints[0].value[0].fpVal) : null,
-    walk_minutes,
-    walk_detected: walk_minutes >= 10,
-    weights_detected: weights.length > 0,
-    activity_count: activities.length,
+    steps,
+    distance_km: distance_mm != null ? round(distance_mm / 1e6, 2) : null,
+    floors: first(floorsRoll, r => r?.floors?.count),
+    active_zone_minutes: azm,
+    cardio_minutes: azm,
+    walk_minutes: null,      // requires the exercise data type; not wired yet
+    weights_detected: false, // as above
 
     // Vitals
     sleep_hours,
     sleep_stages,
-    resting_hr: resting_hr ? Math.round(resting_hr) : null,
-    avg_hr: avg_hr ? Math.round(avg_hr) : null,
-    peak_hr,
-    hrv: hrvData?.dataPoints?.[0]?.value?.[0]?.fpVal
-      ? Math.round(hrvData.dataPoints[0].value[0].fpVal) : null,
-    spo2: spo2Data?.dataPoints?.[0]?.value?.[0]?.fpVal
-      ? Math.round(spo2Data.dataPoints[0].value[0].fpVal * 10) / 10 : null,
-    respiratory_rate: respData?.dataPoints?.[0]?.value?.[0]?.fpVal
-      ? Math.round(respData.dataPoints[0].value[0].fpVal * 10) / 10 : null,
-    vo2_max: vo2Data?.dataPoints?.[0]?.value?.[0]?.fpVal
-      ? Math.round(vo2Data.dataPoints[0].value[0].fpVal * 10) / 10 : null,
-    hr_zones,
-    hr_points: hrPoints.map(p => ({
-      t: new Date(p.endTime).getTime(),
-      v: Math.round(p?.value?.[0]?.fpVal || 0)
-    })).filter(p => p.v > 0),
+    resting_hr: round(
+      first(restingRoll, r => r?.dailyRestingHeartRate?.beatsPerMinute)
+      ?? (hrVals.length ? Math.min(...hrVals) : null)
+    ),
+    avg_hr: hrVals.length ? round(hrVals.reduce((a, b) => a + b, 0) / hrVals.length) : null,
+    peak_hr: hrVals.length ? round(Math.max(...hrVals)) : null,
+    hrv: round(first(hrvRoll, r => r?.heartRateVariability?.rootMeanSquareOfSuccessiveDifferencesMilliseconds)),
+    spo2: round(first(spo2Roll, r => r?.oxygenSaturation?.percentage), 1),
+    respiratory_rate: round(first(respRoll, r => r?.dailyRespiratoryRate?.breathsPerMinute), 1),
+
+    hr_points: hrPoints
+      .map(p => ({ t: new Date(hrTime(p)).getTime(), v: hrValue(p) }))
+      .filter(p => p.v != null && Number.isFinite(p.t)),
   }
 }
 
-// ── FOOD SEARCH ───────────────────────────────────────────
+// ── FOOD SEARCH (Open Food Facts — unchanged) ─────────────
 export async function searchFood(query) {
   if (!query || query.length < 3) return []
   try {
@@ -231,7 +300,7 @@ export async function searchFood(query) {
   } catch { return [] }
 }
 
-// ── WEATHER ───────────────────────────────────────────────
+// ── WEATHER (Open-Meteo — unchanged) ──────────────────────
 export async function fetchCurrentWeather(lat, lon) {
   try {
     const res = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,weather_code,surface_pressure&temperature_unit=fahrenheit`)

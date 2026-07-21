@@ -3,6 +3,7 @@ import { fetchCurrentHeartRate, categorizeHeartRate, heartRateSignal, getAuthUrl
 import { getHRTags, deleteHRTag } from '../lib/db'
 import { HR_TAG_CATEGORIES } from '../lib/constants'
 import HRTagModal from '../components/HRTagModal'
+import HeartDayGraph from '../components/HeartDayGraph'
 
 const PIN = '1234'
 
@@ -142,6 +143,12 @@ export default function Heart({ showToast }) {
           >
             <span style={{ fontSize: 16 }}>★</span> Tag this moment
           </button>
+
+          {/* DAY CURVE -- intraday heart rate with that day's tags marked. */}
+          <div className="section-label" style={{ marginTop: 4, marginBottom: 6 }}>Heart rate by day</div>
+          <div style={{ marginBottom: 12 }}>
+            <HeartDayGraph />
+          </div>
 
           {/* RECENT TAGS */}
           {tags.length > 0 && (

@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
 import { getFoodEntries, createFoodEntry, deleteFoodEntry, getTriggerFoods, addTriggerFood } from '../lib/db'
-import { DEFAULT_TRIGGERS } from '../lib/constants'
 import { searchFood } from '../lib/google-health'
 
 const MEAL_TYPES = ['Breakfast','Morning snack','Lunch','Afternoon snack','Dinner','Evening snack','Drink']
@@ -35,7 +34,7 @@ export default function Food({ showToast }) {
   useEffect(()=>{ loadEntries(); loadTriggers() },[])
 
   async function loadEntries() { setEntries(await getFoodEntries(todayKey())) }
-  async function loadTriggers() { const d=await getTriggerFoods(); setTriggers(d.length>0?d:DEFAULT_TRIGGERS) }
+  async function loadTriggers() { setTriggers(await getTriggerFoods()) }
 
   function handleQuery(v) {
     setQuery(v); setForm(f=>({...f,description:v,calories:'',protein_grams:''}))

@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
 import { getFoodEntries, createFoodEntry, deleteFoodEntry, getTriggerFoods, addTriggerFood, addWater, getDailyLog } from '../lib/db'
-import { DEFAULT_TRIGGERS } from '../lib/constants'
 import { searchFood } from '../lib/google-health'
 
 // Local calendar date, not UTC. Recomputed per call so a PWA left open
@@ -32,7 +31,8 @@ export default function Body({ showToast }) {
   useEffect(() => { loadEntries(); loadTriggers() }, [])
   async function loadEntries() { setEntries(await getFoodEntries(todayKey())) }
     getDailyLog(todayKey()).then(l => setWaterOz(Number(l?.water_oz || 0))).catch(() => {})
-  async function loadTriggers() { const d = await getTriggerFoods(); setTriggers(d.length > 0 ? d : DEFAULT_TRIGGERS) }
+  async function loadTriggers() { // No hardcoded fallback -- an empty list means nothing is saved yet.
+    setTriggers(await getTriggerFoods()) }
 
   function handleQuery(v) {
     setQuery(v); setForm(f => ({ ...f, description: v, calories: '', protein_grams: '' }))

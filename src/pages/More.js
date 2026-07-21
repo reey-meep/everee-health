@@ -4,6 +4,7 @@ import {
   getAuthUrl, isConnected, clearToken,
   fetchDaySnapshot, getDebugLog, clearDebugLog,
 } from '../lib/google-health'
+import { pushSupported, permission, getSubscription, enablePush, disablePush, sendTestNotification } from '../lib/push'
 
 const todayKey = () => {
   const d = new Date()
@@ -18,6 +19,31 @@ export default function More({ showToast, openMetric }) {
   const [snapshot, setSnapshot] = useState(null)
   const [showDebug, setShowDebug] = useState(false)
   const [log, setLog] = useState([])
+  const [pushOn, setPushOn] = useState(false)
+  const [pushBusy, setPushBusy] = useState(false)
+  const [pushNote, setPushNote] = useState('')
+
+  useEffect(() => {
+    getSubscription().then(sub => setPushOn(!!sub)).catch(() => {})
+  }, [])
+
+  async function togglePush() {
+    setPushBusy(true); setPushNote('')
+    const res = pushOn ? await disablePush() : await enablePush()
+    if (res.ok) {
+      setPushOn(!pushOn)
+      showToast(pushOn ? 'Reminders off' : 'Reminders on', pushOn ? undefined : 'var(--green)')
+    } else {
+      setPushNote(res.reason || 'Could not change notification settings.')
+      showToast('Not changed', 'var(--red)')
+    }
+    setPushBusy(false)
+  }
+
+  async function testPush() {
+    const res = await sendTestNotification()
+    if (!res.ok) { setPushNote(res.reason); showToast('Test failed', 'var(--red)') }
+  }
 
   useEffect(() => {
     runAllAnalytics().then(r => {
@@ -73,6 +99,51 @@ export default function More({ showToast, openMetric }) {
             <div style={{ fontSize: 12, color: 'var(--ink2)', lineHeight: 1.55 }}>{card.body}</div>
           </div>
         ))}
+
+        {/* ── REMINDERS ────────────────────────────────────── */}
+        <div className="section-label" style={{ marginTop: 4 }}>Reminders</div>
+        <div className="card" style={{ padding: 16 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+            <span style={{ width: 8, height: 8, borderRadius: 4, background: pushOn ? 'var(--green)' : 'var(--ink4)' }} />
+            <div style={{ fontSize: 13.5, fontWeight: 700 }}>{pushOn ? 'Scheduled reminders on' : 'Scheduled reminders off'}</div>
+          </div>
+          <div style={{ fontSize: 12, color: 'var(--ink2)', lineHeight: 1.55, marginBottom: 12 }}>
+            {pushSupported()
+              ? 'Prompts fire at their scheduled time with Done and Skip buttons, so you can log without opening the app.'
+              : 'This browser does not support push notifications.'}
+          </div>
+
+          <div style={{
+            fontSize: 11.5, lineHeight: 1.5, color: '#7A4500', background: 'var(--amber-xl)',
+            border: '1px solid var(--amber)', borderRadius: 8, padding: '8px 10px', marginBottom: 12,
+          }}>
+            Web push is best-effort — Android battery saver can delay or drop it.
+            Keep a phone alarm for the 17:30 propranolol dose.
+          </div>
+
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <button disabled={pushBusy || !pushSupported()} onClick={togglePush} style={{
+              minHeight: 44, padding: '0 16px', borderRadius: 10, border: pushOn ? '1.5px solid var(--bd)' : 'none',
+              background: pushOn ? 'var(--bg)' : 'var(--indigo)', color: pushOn ? 'var(--ink2)' : '#fff',
+              fontSize: 13.5, fontWeight: 600, cursor: 'pointer', opacity: pushBusy ? .6 : 1,
+            }}>
+              {pushBusy ? '…' : pushOn ? 'Turn off' : 'Turn on reminders'}
+            </button>
+            {pushOn && (
+              <button onClick={testPush} style={{
+                minHeight: 44, padding: '0 16px', borderRadius: 10, border: '1.5px solid var(--bd)',
+                background: 'var(--bg)', color: 'var(--ink2)', fontSize: 13.5, fontWeight: 600, cursor: 'pointer',
+              }}>Send test</button>
+            )}
+          </div>
+
+          {pushNote && (
+            <div className="mono" style={{ fontSize: 10.5, color: 'var(--red)', marginTop: 10, lineHeight: 1.5 }}>{pushNote}</div>
+          )}
+          <div className="mono" style={{ fontSize: 9.5, color: 'var(--ink4)', marginTop: 8 }}>
+            permission: {permission()}
+          </div>
+        </div>
 
         {/* ── FITBIT / GOOGLE HEALTH ───────────────────────── */}
         <div className="section-label" style={{ marginTop: 4 }}>Fitbit</div>

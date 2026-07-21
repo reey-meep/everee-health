@@ -233,15 +233,6 @@ export default function Today({ showToast, openMetric, openEpisode, openSchedule
       </div>
 
       <div className="body">
-        <div className="section-label">Schedule <a onClick={openSchedule}>Open ›</a></div>
-        <ScheduleWidget
-          schedule={schedule}
-          completions={completions}
-          totals={scheduleTotals}
-          steps={fitbit?.steps}
-          onOpen={openSchedule}
-        />
-
         {/* Activity widgets */}
         {fitbit && (
           <div>
@@ -444,6 +435,16 @@ export default function Today({ showToast, openMetric, openEpisode, openSchedule
           onAddWater={handleAddWater}
           showToast={showToast}
         />
+
+        <div className="section-label">Schedule <a onClick={openSchedule}>Open ›</a></div>
+        <ScheduleWidget
+          schedule={schedule}
+          completions={completions}
+          totals={scheduleTotals}
+          steps={fitbit?.steps}
+          onOpen={openSchedule}
+        />
+
 
         {/* Recent episodes */}
         {episodes.length > 0 && (

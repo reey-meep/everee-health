@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { getDailyLog, upsertDailyLog, getPracticeLogs, togglePractice, getEpisodes, getScheduleSettings, getFoodEntries } from '../lib/db'
+import { getDailyLog, upsertDailyLog, getPracticeLogs, togglePractice, getEpisodes, getScheduleSettings, getFoodEntries, saveDaySnapshot } from '../lib/db'
 import { getCurrentPhase, getDayNumber, CYCLE_PHASES, ALL_TASKS, SYMPTOMS, TASK_GROUPS, shiftSchedule, deriveScheduleStatus, TRACKABLE_PROMPTS } from '../lib/constants'
 import ScheduleWidget from '../components/ScheduleWidget'
 import PetPanel from '../components/PetPanel'
@@ -92,7 +92,12 @@ export default function Today({ showToast, openMetric, openEpisode, openSchedule
     } catch {}
     if (isConnected()) {
       const s = await fetchDaySnapshot(todayKey())
-      if (s) { setFitbit(s); if (s.sleep_hours && !currentLog.sleep_hours) upsertDailyLog(todayKey(), { sleep_hours: s.sleep_hours }) }
+      if (s) {
+        setFitbit(s)
+        if (s.sleep_hours && !currentLog.sleep_hours) upsertDailyLog(todayKey(), { sleep_hours: s.sleep_hours })
+        // Persist the rest of the snapshot so trends have something to chart.
+        saveDaySnapshot(todayKey(), s).catch(() => {})
+      }
     }
   }
 

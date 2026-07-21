@@ -348,3 +348,40 @@ export async function deletePushSubscription(endpoint) {
   const { error } = await supabase.from('push_subscriptions').delete().eq('endpoint', endpoint)
   if (error) { console.error(error); throw error }
 }
+
+// ── TRENDS ──────────────────────────────────────────────────
+// Returns [{ date, value }] oldest-first for a metric over the last N days.
+// Symptom keys read out of the scores jsonb; everything else is a column.
+const SYMPTOM_KEYS = ['dizziness', 'visual', 'fatigue', 'gut', 'anxiety']
+
+export async function getMetricTrend(metric, days = 14) {
+  const since = new Date()
+  since.setDate(since.getDate() - (days - 1))
+  const sinceStr = `${since.getFullYear()}-${String(since.getMonth() + 1).padStart(2, '0')}-${String(since.getDate()).padStart(2, '0')}`
+
+  const isSymptom = SYMPTOM_KEYS.includes(metric)
+  const cols = isSymptom ? 'date, scores' : `date, ${metric}`
+  const { data, error } = await supabase
+    .from('daily_logs')
+    .select(cols)
+    .eq('user_id', USER_ID)
+    .gte('date', sinceStr)
+    .order('date', { ascending: true })
+  if (error) { console.error(error); return [] }
+
+  return (data || [])
+    .map(r => ({ date: r.date, value: isSymptom ? (r.scores?.[metric] ?? null) : (r[metric] ?? null) }))
+    .filter(r => r.value != null)
+}
+
+// Writes the day's Google Health snapshot so history accumulates. Without this
+// every metric except sleep was fetched and discarded, leaving nothing to chart.
+export async function saveDaySnapshot(date, snap) {
+  if (!snap) return null
+  const fields = ['steps', 'distance_km', 'floors', 'active_zone_minutes',
+    'resting_hr', 'avg_hr', 'peak_hr', 'hrv', 'spo2', 'respiratory_rate', 'walk_minutes']
+  const updates = {}
+  fields.forEach(f => { if (snap[f] != null) updates[f] = snap[f] })
+  if (!Object.keys(updates).length) return null
+  return upsertDailyLog(date, updates)
+}

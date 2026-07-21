@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { getMetricTrend } from '../lib/db'
 
 const METRICS = {
   steps: {
@@ -46,10 +47,22 @@ const METRICS = {
 }
 
 const WEEK_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
-const PERIODS = ['Day', 'Week', 'Month', 'Year']
+// Day removed -- a single day is not a trend. Values map to lookback length.
+const PERIODS = { Week: 7, Month: 30, '3 Months': 90 }
 
 export default function MetricDetail({ data, onBack }) {
   const [period, setPeriod] = useState('Week')
+  const [trend, setTrend] = useState(null)   // null = loading, [] = genuinely none
+
+  const metricKey = data?.metric || 'steps'
+  useEffect(() => {
+    let live = true
+    setTrend(null)
+    getMetricTrend(metricKey, PERIODS[period])
+      .then(t => { if (live) setTrend(t) })
+      .catch(() => { if (live) setTrend([]) })
+    return () => { live = false }
+  }, [metricKey, period])
   const cfg = METRICS[data?.metric] || METRICS.steps
   const color = cfg.color
   
@@ -70,7 +83,7 @@ export default function MetricDetail({ data, onBack }) {
 
       {/* Period selector */}
       <div className="period-row">
-        {PERIODS.map(p => (
+        {Object.keys(PERIODS).map(p => (
           <button key={p} className={`period-btn${period === p ? ' on' : ''}`}
             style={period === p ? { background: color, borderColor: color } : {}}
             onClick={() => setPeriod(p)}>{p}</button>
@@ -78,14 +91,60 @@ export default function MetricDetail({ data, onBack }) {
       </div>
 
       <div style={{ padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: 10 }}>
-        {/* History — intentionally empty until real trend data is wired up.
-            This previously rendered hardcoded bars and avg/high/low constants,
-            which presented invented history as the user's own record. */}
-        <div className="card" style={{ padding: 20, textAlign: 'center' }}>
-          <div className="eyebrow" style={{ marginBottom: 6 }}>History</div>
-          <div style={{ fontSize: 12.5, color: 'var(--ink3)', lineHeight: 1.5 }}>
-            No history yet. Trends appear here once you've logged<br />this metric for a few days.
-          </div>
+        {/* Real history from daily_logs. Never synthesised -- if there is no
+            data the card says so rather than drawing a plausible shape. */}
+        <div className="card" style={{ padding: '16px 12px 10px' }}>
+          <div className="eyebrow" style={{ padding: '0 4px 10px' }}>History · last {PERIODS[period]} days</div>
+          {trend === null && (
+            <div className="mono" style={{ fontSize: 10, color: 'var(--ink3)', textAlign: 'center', padding: 18 }}>Loading…</div>
+          )}
+          {trend?.length === 0 && (
+            <div style={{ fontSize: 12.5, color: 'var(--ink3)', lineHeight: 1.5, textAlign: 'center', padding: 16 }}>
+              Nothing recorded yet for this metric.<br />
+              <span className="mono" style={{ fontSize: 10, color: 'var(--ink4)' }}>history starts building from today</span>
+            </div>
+          )}
+          {trend?.length > 0 && (() => {
+            const vals = trend.map(t => t.value)
+            const max = Math.max(...vals), min = Math.min(...vals)
+            const span = max - min || 1
+            return (
+              <>
+                <div className="bar-chart" style={{ alignItems: 'flex-end' }}>
+                  {trend.map((t, i) => {
+                    // Scale within the observed range so small variations stay legible.
+                    const h = Math.max(4, Math.round(((t.value - min) / span) * 60) + 12)
+                    const isLast = i === trend.length - 1
+                    return (
+                      <div key={t.date} className="bar-col" title={`${t.date}: ${t.value}`}>
+                        <div className="bar-fill" style={{ height: h, background: isLast ? color : color + '55' }} />
+                        <div className="bar-lbl" style={{ color: isLast ? color : 'var(--ink3)', fontWeight: isLast ? 700 : 400 }}>
+                          {Number(t.date.slice(8, 10))}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+                <div className="stat3" style={{ marginTop: 12 }}>
+                  {[
+                    ['Average', (vals.reduce((a, b) => a + b, 0) / vals.length)],
+                    ['High', max],
+                    ['Low', min],
+                  ].map(([l, v]) => (
+                    <div key={l} className="stat-tile">
+                      <div className="mono" style={{ fontSize: 17, fontWeight: 300, color, lineHeight: 1, marginBottom: 4 }}>
+                        {Math.round(v * 10) / 10}
+                      </div>
+                      <div className="eyebrow">{l}</div>
+                    </div>
+                  ))}
+                </div>
+                <div className="mono" style={{ fontSize: 9, color: 'var(--ink4)', textAlign: 'center', marginTop: 8 }}>
+                  {trend.length} day{trend.length === 1 ? '' : 's'} with data
+                </div>
+              </>
+            )
+          })()}
         </div>
 
         {/* Goal bar — only when this metric actually has a value.

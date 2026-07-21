@@ -189,3 +189,81 @@ export const HR_TAG_CATEGORIES = [
   { id: 'woke_up', label: 'Woke up', color: '#9898B8', icon: '☀' },
   { id: 'notable', label: 'Notable moment', color: '#38BDF8', icon: '★' },
 ]
+
+// ── DAILY SCHEDULE (tamagotchi prompts) ─────────────────────
+// Times are relative to a 07:30 wake anchor. Changing wake time in settings
+// shifts every prompt by the same offset via shiftSchedule().
+export const SCHEDULE_TARGETS = {
+  calories: { floor: 1500, goal: 1800, unit: 'cal' },
+  water:    { floor: 85,   goal: 100,  unit: 'oz' },
+  steps:    { floor: 5000, goal: 7500, unit: '', ceiling: true }, // ceiling, not a target -- dysautonomia pacing
+  sleep:    { floor: 7,    goal: 8,    unit: 'h' },
+}
+
+// kind drives the colour bar and the tap action.
+// food=amber  water=sky  movement=green  meds=purple  check=indigo  rest=ink
+export const SCHEDULE_KINDS = {
+  meds:     { color: 'var(--purple)', label: 'Meds' },
+  food:     { color: 'var(--amber)',  label: 'Food' },
+  water:    { color: 'var(--sky)',    label: 'Water' },
+  movement: { color: 'var(--green)',  label: 'Movement' },
+  rest:     { color: 'var(--ink3)',   label: 'Rest' },
+  check:    { color: 'var(--indigo)', label: 'Check-in' },
+}
+
+export const SCHEDULE = [
+  { id: 'wake',          time: '07:30', kind: 'rest',     title: 'Wake + sunlight',        detail: '10 min daylight if you can',            action: 'confirm' },
+  { id: 'meds_am',       time: '07:35', kind: 'meds',     title: 'Propranolol #1 + antihistamines', detail: 'Propranolol 10mg · Loratadine 10mg · Famotidine 20mg', action: 'confirm' },
+  { id: 'meal_1',        time: '07:45', kind: 'food',     title: 'Mini meal #1',            detail: '~150 cal',       action: 'meal', calories: 150, water: 12 },
+  { id: 'water_0830',    time: '08:30', kind: 'water',    title: 'Water',                   detail: '12 oz',          action: 'water', water: 12 },
+  { id: 'meal_2',        time: '09:00', kind: 'food',     title: 'Mini meal #2',            detail: '~150 cal',       action: 'meal', calories: 150 },
+  { id: 'vestibular_1',  time: '09:30', kind: 'movement', title: 'Vestibular session #1',   detail: '10 min',         action: 'timer', minutes: 10 },
+  { id: 'water_1000',    time: '10:00', kind: 'water',    title: 'Water',                   detail: '16 oz',          action: 'water', water: 16 },
+  { id: 'meal_3',        time: '10:30', kind: 'food',     title: 'Mini meal #3',            detail: '~150 cal',       action: 'meal', calories: 150 },
+  { id: 'meds_mid',      time: '11:30', kind: 'meds',     title: 'Propranolol #2',          detail: '10mg',           action: 'confirm' },
+  { id: 'meal_4',        time: '12:00', kind: 'food',     title: 'Mini meal #4',            detail: '~200 cal + 16 oz water', action: 'meal', calories: 200, water: 16 },
+  { id: 'checkin_mid',   time: '12:30', kind: 'check',    title: 'Symptom check-in',        detail: 'Score your five',  action: 'checkin' },
+  { id: 'rest_1300',     time: '13:00', kind: 'rest',     title: 'Rest horizontal',         detail: '20 min',         action: 'timer', minutes: 20 },
+  { id: 'meal_5',        time: '14:00', kind: 'food',     title: 'Mini meal #5',            detail: '~150 cal + 12 oz water', action: 'meal', calories: 150, water: 12 },
+  { id: 'walk',          time: '14:30', kind: 'movement', title: 'Grounding walk',          detail: '15-20 min',      action: 'timer', minutes: 20 },
+  { id: 'meal_6',        time: '15:30', kind: 'food',     title: 'Mini meal #6',            detail: '~150 cal + 12 oz water', action: 'meal', calories: 150, water: 12 },
+  { id: 'vestibular_2',  time: '16:00', kind: 'movement', title: 'Vestibular session #2',   detail: '10 min',         action: 'timer', minutes: 10 },
+  { id: 'meal_7',        time: '17:00', kind: 'food',     title: 'Mini meal #7',            detail: '~150 cal',       action: 'meal', calories: 150 },
+  { id: 'meds_pm',       time: '17:30', kind: 'meds',     title: 'Propranolol #3',          detail: '10mg -- do not let this one run late', action: 'confirm', critical: true },
+  { id: 'meal_8',        time: '18:30', kind: 'food',     title: 'Mini meal #8 + Famotidine PM', detail: '~250 cal + 12 oz water', action: 'meal', calories: 250, water: 12 },
+  { id: 'checkin_pm',    time: '19:00', kind: 'check',    title: 'Symptom check-in',        detail: 'Score your five',  action: 'checkin' },
+  { id: 'meal_9',        time: '20:00', kind: 'food',     title: 'Mini meal #9',            detail: '~200 cal + 8 oz water', action: 'meal', calories: 200, water: 8 },
+  { id: 'winddown',      time: '20:30', kind: 'rest',     title: 'Wind-down',               detail: 'Screens off · magnesium', action: 'confirm' },
+  { id: 'bed',           time: '21:00', kind: 'rest',     title: 'In bed',                  detail: 'Aim 9-10h to clear 7-8h asleep', action: 'confirm' },
+]
+
+const toMin = t => { const [h, m] = t.split(':').map(Number); return h * 60 + m }
+const toHHMM = m => `${String(Math.floor(((m % 1440) + 1440) % 1440 / 60)).padStart(2, '0')}:${String(((m % 60) + 60) % 60).padStart(2, '0')}`
+
+// Shift every prompt by the difference between the configured wake time and 07:30.
+export function shiftSchedule(wakeTime = '07:30') {
+  const delta = toMin(wakeTime) - toMin('07:30')
+  if (!delta) return SCHEDULE
+  return SCHEDULE.map(s => ({ ...s, time: toHHMM(toMin(s.time) + delta) }))
+}
+
+// Next prompt that hasn't been actioned yet, given completions for today.
+export function nextPrompt(schedule, completions = {}, now = new Date()) {
+  const mins = now.getHours() * 60 + now.getMinutes()
+  const pending = schedule.filter(s => !completions[s.id])
+  return pending.find(s => toMin(s.time) >= mins) || null
+}
+
+export function minutesUntil(time, now = new Date()) {
+  return toMin(time) - (now.getHours() * 60 + now.getMinutes())
+}
+
+export const scheduleTotals = (schedule, completions = {}) => {
+  let calories = 0, water = 0
+  schedule.forEach(s => {
+    if (completions[s.id]?.status !== 'done') return
+    calories += s.calories || 0
+    water += s.water || 0
+  })
+  return { calories, water }
+}

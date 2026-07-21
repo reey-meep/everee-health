@@ -281,3 +281,70 @@ export async function getPropranololAnalytics(days = 30) {
     rawDoses: doses,
   }
 }
+
+// ── SCHEDULE / TAMAGOTCHI ───────────────────────────────────
+// Records a scheduled prompt as done or skipped, and folds any calories/water
+// it carries into the day's running totals. Read-modify-write on the jsonb blob
+// is fine here: single user, single device at a time.
+export async function completePrompt(date, prompt, status = 'done') {
+  const current = await getDailyLog(date)
+  const completions = { ...(current?.schedule_completions || {}) }
+  const already = completions[prompt.id]?.status === 'done'
+  completions[prompt.id] = { status, at: new Date().toISOString() }
+
+  const updates = { schedule_completions: completions }
+  // Only add the payload the first time it's marked done, so re-tapping or
+  // toggling done -> skipped -> done doesn't double-count.
+  if (status === 'done' && !already) {
+    if (prompt.calories) updates.calories_logged = (current?.calories_logged || 0) + prompt.calories
+    if (prompt.water) updates.water_oz = Number(current?.water_oz || 0) + prompt.water
+  }
+  return upsertDailyLog(date, updates)
+}
+
+export async function addWater(date, oz) {
+  const current = await getDailyLog(date)
+  return upsertDailyLog(date, { water_oz: Number(current?.water_oz || 0) + oz })
+}
+
+export async function getScheduleSettings() {
+  const { data, error } = await supabase
+    .from('schedule_settings')
+    .select('*')
+    .eq('user_id', USER_ID)
+    .maybeSingle()
+  if (error) console.error(error)
+  return data
+}
+
+export async function saveScheduleSettings(updates) {
+  const { data, error } = await supabase
+    .from('schedule_settings')
+    .upsert({ user_id: USER_ID, ...updates, updated_at: new Date().toISOString() }, { onConflict: 'user_id' })
+    .select()
+    .single()
+  if (error) { console.error(error); throw error }
+  return data
+}
+
+export async function savePushSubscription(sub) {
+  const json = sub.toJSON ? sub.toJSON() : sub
+  const { data, error } = await supabase
+    .from('push_subscriptions')
+    .upsert({
+      user_id: USER_ID,
+      endpoint: json.endpoint,
+      p256dh: json.keys?.p256dh,
+      auth: json.keys?.auth,
+      user_agent: navigator.userAgent.slice(0, 300),
+    }, { onConflict: 'endpoint' })
+    .select()
+    .single()
+  if (error) { console.error(error); throw error }
+  return data
+}
+
+export async function deletePushSubscription(endpoint) {
+  const { error } = await supabase.from('push_subscriptions').delete().eq('endpoint', endpoint)
+  if (error) { console.error(error); throw error }
+}

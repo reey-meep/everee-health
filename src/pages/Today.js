@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
-import { getDailyLog, upsertDailyLog, getPracticeLogs, togglePractice, getEpisodes } from '../lib/db'
-import { getCurrentPhase, getDayNumber, CYCLE_PHASES, ALL_TASKS, SYMPTOMS, TASK_GROUPS } from '../lib/constants'
+import { getDailyLog, upsertDailyLog, getPracticeLogs, togglePractice, getEpisodes, getScheduleSettings } from '../lib/db'
+import { getCurrentPhase, getDayNumber, CYCLE_PHASES, ALL_TASKS, SYMPTOMS, TASK_GROUPS, shiftSchedule } from '../lib/constants'
+import ScheduleWidget from '../components/ScheduleWidget'
 import { fetchDaySnapshot, fetchCurrentWeather, isConnected } from '../lib/google-health'
 
 // Local calendar date, not UTC. Recomputed per call so a PWA left open
@@ -53,7 +54,7 @@ function Carousel({ children }) {
   )
 }
 
-export default function Today({ showToast, openMetric, openEpisode }) {
+export default function Today({ showToast, openMetric, openEpisode, openSchedule }) {
   const [log, setLog] = useState({})
   const [practices, setPractices] = useState({})
   const [fitbit, setFitbit] = useState(null)
@@ -61,6 +62,7 @@ export default function Today({ showToast, openMetric, openEpisode }) {
   const [episodes, setEpisodes] = useState([])
   const [openGroup, setOpenGroup] = useState('medications')
   const [showAllSymptoms, setShowAllSymptoms] = useState(false)
+  const [settings, setSettings] = useState(null)
 
   const phase = getCurrentPhase()
   const day = getDayNumber()
@@ -72,6 +74,7 @@ export default function Today({ showToast, openMetric, openEpisode }) {
     if (l) setLog(l)
     const m = {}; p.forEach(x => { m[x.practice_id] = x.completed }); setPractices(m)
     setEpisodes(eps)
+    getScheduleSettings().then(setSettings).catch(() => {})
     loadEnv(l || {})
   }
 
@@ -138,6 +141,12 @@ export default function Today({ showToast, openMetric, openEpisode }) {
   const highRisk = ['luteal_late', 'pms'].includes(log.cycle_phase)
   const stepPct = fitbit?.steps ? Math.min(fitbit.steps / 7500, 1) : 0
   const displaySymptoms = showAllSymptoms ? SYMPTOMS : SYMPTOMS.slice(0, 3)
+  const schedule = shiftSchedule(settings?.wake_time || '07:30')
+  const completions = log.schedule_completions || {}
+  // Totals come from the persisted columns the schedule increments -- not from
+  // food_entries, which is tracked separately. Summing both would double-count
+  // any meal logged in the diary AND ticked off here.
+  const scheduleTotals = { calories: log.calories_logged || 0, water: Number(log.water_oz || 0) }
 
   return (
     <div className="screen active">
@@ -200,6 +209,15 @@ export default function Today({ showToast, openMetric, openEpisode }) {
       </div>
 
       <div className="body">
+        <div className="section-label">Schedule <a onClick={openSchedule}>Open ›</a></div>
+        <ScheduleWidget
+          schedule={schedule}
+          completions={completions}
+          totals={scheduleTotals}
+          steps={fitbit?.steps}
+          onOpen={openSchedule}
+        />
+
         {/* Activity widgets */}
         {fitbit && (
           <div>

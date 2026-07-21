@@ -3,3 +3,6 @@ build/
 .env
 .env.local
 .DS_Store
+
+# Web Push secrets -- never commit
+*vapid-keys.txt

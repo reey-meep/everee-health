@@ -124,13 +124,10 @@ const dayFilter = (type: string, field: string, date: string) => {
 }
 const firstNum = (obj: any, keys: string[]) => {
   if (!obj || typeof obj !== 'object') return null
+  // Named fields only. An earlier version fell back to "first numeric field",
+  // which happened to return the right HRV but would have returned entropy or
+  // non-REM heart rate had Google ordered the keys differently.
   for (const k of keys) { const v = num(obj[k]); if (v != null && !Number.isNaN(v)) return v }
-  // Fall back to any scalar numeric field that isn't a timestamp.
-  for (const [k, v] of Object.entries(obj)) {
-    if (typeof v === 'object' || /time|date|interval/i.test(k)) continue
-    const n = num(v)
-    if (n != null && !Number.isNaN(n)) return n
-  }
   return null
 }
 const avgOf = (pts: any[], type: string, keys: string[]) => {
@@ -181,10 +178,14 @@ async function snapshot(token: string, date: string) {
       ?? (hrVals.length ? Math.min(...hrVals) : null)),
     avg_hr: hrVals.length ? round(hrVals.reduce((a, b) => a + b, 0) / hrVals.length) : null,
     peak_hr: hrVals.length ? round(Math.max(...hrVals)) : null,
-    hrv: round(avgOf(hrv, 'daily-heart-rate-variability',
-      ['rootMeanSquareOfSuccessiveDifferencesMilliseconds', 'averageMilliseconds', 'milliseconds', 'average'])),
-    spo2: round(avgOf(spo2, 'daily-oxygen-saturation',
-      ['averagePercentage', 'average', 'percentage', 'meanPercentage']), 1),
+    // Field names verified by probing the live API (Inspire 3, 2026-07-20):
+    //   dailyHeartRateVariability.averageHeartRateVariabilityMilliseconds = 45.7
+    //   dailyOxygenSaturation.averagePercentage = 96.1
+    // The same payloads also carry entropy (2.925) and
+    // nonRemHeartRateBeatsPerMinute ("59"), so a loose match here would put the
+    // wrong number in a health record.
+    hrv: round(avgOf(hrv, 'daily-heart-rate-variability', ['averageHeartRateVariabilityMilliseconds'])),
+    spo2: round(avgOf(spo2, 'daily-oxygen-saturation', ['averagePercentage']), 1),
     respiratory_rate: round(avgOf(resp, 'daily-respiratory-rate', ['breathsPerMinute']), 1),
     sleep_hours: sleepHours,
   }

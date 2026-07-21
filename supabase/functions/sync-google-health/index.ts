@@ -123,8 +123,14 @@ const dayFilter = (type: string, field: string, date: string) => {
   return `${k}.${field} >= "${date}" AND ${k}.${field} < "${addDays(date, 1)}"`
 }
 const firstNum = (obj: any, keys: string[]) => {
-  if (!obj) return null
+  if (!obj || typeof obj !== 'object') return null
   for (const k of keys) { const v = num(obj[k]); if (v != null && !Number.isNaN(v)) return v }
+  // Fall back to any scalar numeric field that isn't a timestamp.
+  for (const [k, v] of Object.entries(obj)) {
+    if (typeof v === 'object' || /time|date|interval/i.test(k)) continue
+    const n = num(v)
+    if (n != null && !Number.isNaN(n)) return n
+  }
   return null
 }
 const avgOf = (pts: any[], type: string, keys: string[]) => {
@@ -139,8 +145,8 @@ async function snapshot(token: string, date: string) {
     rollup(token, 'floors', date),
     rollup(token, 'active-zone-minutes', date),
     list(token, 'daily-resting-heart-rate', dayFilter('daily-resting-heart-rate', 'date', date), 100),
-    list(token, 'heart-rate-variability', dayFilter('heart-rate-variability', 'sample_time.civil_time', date), 500),
-    list(token, 'oxygen-saturation', dayFilter('oxygen-saturation', 'sample_time.civil_time', date), 500),
+    list(token, 'daily-heart-rate-variability', dayFilter('daily-heart-rate-variability', 'date', date), 100),
+    list(token, 'daily-oxygen-saturation', dayFilter('daily-oxygen-saturation', 'date', date), 100),
     list(token, 'daily-respiratory-rate', dayFilter('daily-respiratory-rate', 'date', date), 100),
     list(token, 'heart-rate', dayFilter('heart-rate', 'sample_time.civil_time', date), 10000),
     list(token, 'sleep', dayFilter('sleep', 'interval.civil_end_time', date), 25),
@@ -175,8 +181,10 @@ async function snapshot(token: string, date: string) {
       ?? (hrVals.length ? Math.min(...hrVals) : null)),
     avg_hr: hrVals.length ? round(hrVals.reduce((a, b) => a + b, 0) / hrVals.length) : null,
     peak_hr: hrVals.length ? round(Math.max(...hrVals)) : null,
-    hrv: round(avgOf(hrv, 'heart-rate-variability', ['rootMeanSquareOfSuccessiveDifferencesMilliseconds'])),
-    spo2: round(avgOf(spo2, 'oxygen-saturation', ['percentage']), 1),
+    hrv: round(avgOf(hrv, 'daily-heart-rate-variability',
+      ['rootMeanSquareOfSuccessiveDifferencesMilliseconds', 'averageMilliseconds', 'milliseconds', 'average'])),
+    spo2: round(avgOf(spo2, 'daily-oxygen-saturation',
+      ['averagePercentage', 'average', 'percentage', 'meanPercentage']), 1),
     respiratory_rate: round(avgOf(resp, 'daily-respiratory-rate', ['breathsPerMinute']), 1),
     sleep_hours: sleepHours,
   }
@@ -218,6 +226,14 @@ Deno.serve(async req => {
           v: num(p?.heartRate?.beatsPerMinute),
         })).filter((p: any) => p.t && p.v != null),
       })
+    }
+
+    if (action === 'probe') {
+      const date = body.date || localToday()
+      const type = body.type
+      const field = body.field || 'date'
+      const rows = await list(token, type, dayFilter(type, field, date), 50)
+      return json({ type, date, count: rows.length, sample: rows.slice(0, 3) })
     }
 
     if (action === 'backfill') {

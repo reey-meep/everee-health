@@ -1,27 +1,18 @@
-import { useState } from 'react'
-import { SCHEDULE_KINDS, SCHEDULE_TARGETS, minutesUntil } from '../lib/constants'
+import { SCHEDULE_KINDS, SCHEDULE_TARGETS, minutesUntil, PROMPT_SOURCES } from '../lib/constants'
 
-export default function ScheduleDetail({ schedule, completions, totals, onAction, onBack, showToast }) {
-  const [busy, setBusy] = useState(null)
-  const [timer, setTimer] = useState(null) // { id, endsAt, label }
+// Read-only timeline. Nothing is ticked off here -- status is derived from the
+// food diary, water log, Daily Practices and symptom scores, so there is one
+// place to log each thing and the schedule simply reflects it.
 
-  async function act(prompt, status) {
-    setBusy(prompt.id)
-    try {
-      await onAction(prompt, status)
-    } catch {
-      showToast('Not saved — nothing was logged', 'var(--red)')
-    }
-    setBusy(null)
-  }
+const WHERE = {
+  meal: 'Log in Body → Food diary',
+  water: 'Log in Body → Water',
+  practice: 'Tick in Daily Practices',
+  scores: 'Score in Symptom scores',
+  info: null,
+}
 
-  function startTimer(prompt) {
-    setTimer({ id: prompt.id, endsAt: Date.now() + prompt.minutes * 60000, label: prompt.title })
-    showToast(`${prompt.minutes} min — timer started`)
-  }
-
-  const nowMins = new Date().getHours() * 60 + new Date().getMinutes()
-
+export default function ScheduleDetail({ schedule, statuses, totals, onBack }) {
   return (
     <div style={{ minHeight: '100svh', background: 'var(--bg)', paddingBottom: 40 }}>
       <div className="detail-header">
@@ -37,21 +28,24 @@ export default function ScheduleDetail({ schedule, completions, totals, onAction
           {Math.round(totals.calories)} / {SCHEDULE_TARGETS.calories.goal} cal ·{' '}
           {Math.round(totals.water)} / {SCHEDULE_TARGETS.water.goal} oz
         </div>
+        <div className="mono" style={{ fontSize: 9.5, color: 'var(--ink4)', marginTop: 4, lineHeight: 1.5 }}>
+          Reflects what you&rsquo;ve logged elsewhere — nothing to tick off here.
+        </div>
       </div>
 
       <div style={{ padding: '0 16px', display: 'flex', flexDirection: 'column', gap: 8 }}>
         {schedule.map(p => {
-          const c = completions[p.id]
-          const doneState = c?.status
+          const status = statuses[p.id]
           const kind = SCHEDULE_KINDS[p.kind] || {}
+          const src = PROMPT_SOURCES[p.id] || { type: 'info' }
           const mins = minutesUntil(p.time)
-          const overdue = !doneState && mins < 0
-          const isNow = !doneState && mins >= 0 && mins <= 15
+          const overdue = !status && mins < 0 && src.type !== 'info'
+          const isNow = !status && mins >= 0 && mins <= 15
 
           return (
             <div key={p.id} className="card" style={{
               padding: 0, display: 'flex', overflow: 'hidden',
-              opacity: doneState === 'skipped' ? .45 : 1,
+              opacity: src.type === 'info' ? 0.72 : 1,
               borderColor: p.critical && overdue ? 'var(--red)' : isNow ? 'var(--indigo)' : undefined,
             }}>
               <div style={{ width: 4, background: kind.color, flexShrink: 0 }} />
@@ -64,44 +58,18 @@ export default function ScheduleDetail({ schedule, completions, totals, onAction
                   }}>
                     {p.time}{p.critical ? ' ⚠' : ''}
                   </span>
-                  {doneState === 'done' && <span className="mono" style={{ fontSize: 10, color: 'var(--green)' }}>✓ done</span>}
-                  {doneState === 'skipped' && <span className="mono" style={{ fontSize: 10, color: 'var(--ink4)' }}>skipped</span>}
+                  {status === 'done' && <span className="mono" style={{ fontSize: 10, color: 'var(--green)' }}>✓ logged</span>}
+                  {status === 'partial' && <span className="mono" style={{ fontSize: 10, color: 'var(--amber)' }}>partial</span>}
+                  {overdue && !status && <span className="mono" style={{ fontSize: 10, color: p.critical ? 'var(--red)' : 'var(--amber)' }}>not logged</span>}
                 </div>
 
-                <div style={{
-                  fontSize: 13.5, fontWeight: 700, marginTop: 2,
-                  textDecoration: doneState === 'skipped' ? 'line-through' : 'none',
-                }}>{p.title}</div>
+                <div style={{ fontSize: 13.5, fontWeight: 700, marginTop: 2, color: status === 'done' ? 'var(--ink2)' : 'var(--ink)' }}>
+                  {p.title}
+                </div>
                 {p.detail && <div style={{ fontSize: 11.5, color: 'var(--ink2)', marginTop: 2, lineHeight: 1.45 }}>{p.detail}</div>}
 
-                {timer?.id === p.id && (
-                  <div className="mono" style={{ fontSize: 10.5, color: 'var(--green)', marginTop: 6 }}>
-                    timer running · {p.minutes} min
-                  </div>
-                )}
-
-                {!doneState && (
-                  <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
-                    {p.action === 'timer' && (
-                      <button onClick={() => startTimer(p)} style={btn('var(--bg)', 'var(--ink2)', true)}>
-                        Start {p.minutes}m
-                      </button>
-                    )}
-                    <button disabled={busy === p.id} onClick={() => act(p, 'done')} style={btn(kind.color, '#fff')}>
-                      {busy === p.id ? '…' : 'Done ✓'}
-                    </button>
-                    <button disabled={busy === p.id} onClick={() => act(p, 'skipped')} style={btn('var(--bg)', 'var(--ink3)', true)}>
-                      Skip
-                    </button>
-                  </div>
-                )}
-
-                {doneState && (
-                  <div style={{ marginTop: 8 }}>
-                    <button onClick={() => act(p, doneState === 'done' ? 'skipped' : 'done')} style={btn('var(--bg)', 'var(--ink3)', true)}>
-                      {doneState === 'done' ? 'Undo' : 'Mark done'}
-                    </button>
-                  </div>
+                {!status && WHERE[src.type] && (
+                  <div className="mono" style={{ fontSize: 9.5, color: 'var(--ink4)', marginTop: 6 }}>{WHERE[src.type]}</div>
                 )}
               </div>
             </div>
@@ -111,15 +79,3 @@ export default function ScheduleDetail({ schedule, completions, totals, onAction
     </div>
   )
 }
-
-const btn = (bg, color, outline = false) => ({
-  minHeight: 44,
-  padding: '0 14px',
-  borderRadius: 10,
-  border: outline ? '1.5px solid var(--bd)' : 'none',
-  background: bg,
-  color,
-  fontSize: 12.5,
-  fontWeight: 600,
-  cursor: 'pointer',
-})

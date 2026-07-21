@@ -8,8 +8,8 @@ import EpisodeDetail from './pages/EpisodeDetail'
 import ScheduleDetail from './pages/ScheduleDetail'
 import Toast from './components/Toast'
 import { handleAuthRedirect } from './lib/google-health'
-import { getDailyLog, completePrompt, getScheduleSettings } from './lib/db'
-import { shiftSchedule } from './lib/constants'
+import { getDailyLog, getScheduleSettings, getFoodEntries, getPracticeLogs } from './lib/db'
+import { shiftSchedule, deriveScheduleStatus } from './lib/constants'
 
 const TABS = [
   { id: 'today', label: 'Today', icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> },
@@ -42,13 +42,25 @@ export default function App() {
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
   }
 
-  const [schedState, setSchedState] = useState({ completions: {}, totals: { calories: 0, water: 0 }, wake: '07:30' })
+  const [schedState, setSchedState] = useState({ practices: {}, mealCount: 0, scoreCount: 0, totals: { calories: 0, water: 0 }, wake: '07:30' })
 
   async function loadSchedule() {
-    const [l, st] = await Promise.all([getDailyLog(todayKey()), getScheduleSettings().catch(() => null)])
+    const [l, st, foods, practiceRows] = await Promise.all([
+      getDailyLog(todayKey()),
+      getScheduleSettings().catch(() => null),
+      getFoodEntries(todayKey()),
+      getPracticeLogs(todayKey()),
+    ])
+    const practices = {}
+    practiceRows.forEach(r => { practices[r.practice_id] = r.completed })
     setSchedState({
-      completions: l?.schedule_completions || {},
-      totals: { calories: l?.calories_logged || 0, water: Number(l?.water_oz || 0) },
+      practices,
+      mealCount: foods.length,
+      scoreCount: Object.values(l?.scores || {}).filter(Boolean).length,
+      totals: {
+        calories: foods.reduce((sum, f) => sum + (f.calories || 0), 0),
+        water: Number(l?.water_oz || 0),
+      },
       wake: st?.wake_time || '07:30',
     })
   }
@@ -56,12 +68,6 @@ export default function App() {
   async function openSchedule() {
     await loadSchedule()
     setDetail({ type: 'schedule' })
-  }
-
-  async function handlePromptAction(prompt, status) {
-    await completePrompt(todayKey(), prompt, status)
-    await loadSchedule()
-    showToast(status === 'done' ? 'Logged ✓' : 'Skipped', status === 'done' ? 'var(--green)' : undefined)
   }
 
   function openMetric(data) { setDetail({ type: 'metric', data }) }
@@ -88,11 +94,14 @@ export default function App() {
           {detail.type === 'schedule' && (
             <ScheduleDetail
               schedule={shiftSchedule(schedState.wake)}
-              completions={schedState.completions}
+              statuses={deriveScheduleStatus(shiftSchedule(schedState.wake), {
+                practices: schedState.practices,
+                mealCount: schedState.mealCount,
+                waterOz: schedState.totals.water,
+                scoreCount: schedState.scoreCount,
+              })}
               totals={schedState.totals}
-              onAction={handlePromptAction}
               onBack={closeDetail}
-              showToast={showToast}
             />
           )}
         </div>

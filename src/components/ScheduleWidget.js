@@ -18,11 +18,16 @@ function Bar({ label, value, target, color, ceiling }) {
   )
 }
 
-export default function ScheduleWidget({ schedule, completions, totals, steps, onOpen }) {
-  const next = nextPrompt(schedule, completions)
+export default function ScheduleWidget({ schedule, statuses, trackable, totals, steps, onOpen }) {
+  // nextPrompt takes a completions-shaped map; derived statuses fit the same
+  // contract (a truthy value means 'no longer pending').
+  const next = nextPrompt(schedule, statuses)
   const mins = next ? minutesUntil(next.time) : null
-  const done = schedule.filter(s => completions[s.id]?.status === 'done').length
-  const pct = schedule.length ? done / schedule.length : 0
+  // Only count prompts that can actually be logged; 'wake' and 'rest' have no
+  // record to derive from and would otherwise cap the ring below 100%.
+  const tracked = schedule.filter(s => trackable.includes(s.id))
+  const done = tracked.filter(s => statuses[s.id] === 'done').length
+  const pct = tracked.length ? done / tracked.length : 0
   const C = 2 * Math.PI * 22
 
   const late = mins != null && mins < 0
@@ -47,7 +52,7 @@ export default function ScheduleWidget({ schedule, completions, totals, steps, o
           </svg>
           <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
             <span className="mono" style={{ fontSize: 13, lineHeight: 1 }}>{done}</span>
-            <span className="mono" style={{ fontSize: 8, color: 'var(--ink4)' }}>/{schedule.length}</span>
+            <span className="mono" style={{ fontSize: 8, color: 'var(--ink4)' }}>/{tracked.length}</span>
           </div>
         </div>
 

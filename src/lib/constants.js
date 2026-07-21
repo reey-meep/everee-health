@@ -262,7 +262,10 @@ export const OVERDUE_WINDOW_MIN = 90
 
 export function nextPrompt(schedule, completions = {}, now = new Date()) {
   const mins = now.getHours() * 60 + now.getMinutes()
-  const pending = schedule.filter(s => !completions[s.id])
+  // Accepts either a completions map ({status}) or a derived-status map
+  // ('done' | 'partial' | null). 'partial' still counts as pending.
+  const isDone = v => v === 'done' || (v && v.status === 'done')
+  const pending = schedule.filter(s => !isDone(completions[s.id]))
 
   const overdue = pending.filter(s => toMin(s.time) < mins)
 
@@ -290,3 +293,72 @@ export const scheduleTotals = (schedule, completions = {}) => {
   })
   return { calories, water }
 }
+
+// ── SCHEDULE STATUS, DERIVED ────────────────────────────────
+// The schedule is a read-only timeline. Nothing is ticked off on it directly --
+// status comes from the same records the pet reads, so logging a meal in the
+// food diary or a dose in Daily Practices is what marks the prompt done.
+//
+//   practice -> practice_logs
+//   meal     -> the Nth food_entries row of the day
+//   water    -> daily_logs.water_oz vs the cumulative target by that point
+//   scores   -> daily_logs.scores
+//   info     -> nothing to log (wake, rest)
+export const PROMPT_SOURCES = {
+  wake:         { type: 'info' },
+  meds_am:      { type: 'practice', ids: ['prop1', 'loratadine', 'famo_am'] },
+  meal_1:       { type: 'meal', index: 1 },
+  water_0830:   { type: 'water' },
+  meal_2:       { type: 'meal', index: 2 },
+  vestibular_1: { type: 'practice', ids: ['vest1'] },
+  water_1000:   { type: 'water' },
+  meal_3:       { type: 'meal', index: 3 },
+  meds_mid:     { type: 'practice', ids: ['prop2'] },
+  meal_4:       { type: 'meal', index: 4 },
+  checkin_mid:  { type: 'scores' },
+  rest_1300:    { type: 'info' },
+  meal_5:       { type: 'meal', index: 5 },
+  walk:         { type: 'practice', ids: ['walk'] },
+  meal_6:       { type: 'meal', index: 6 },
+  vestibular_2: { type: 'practice', ids: ['vest2'] },
+  meal_7:       { type: 'meal', index: 7 },
+  meds_pm:      { type: 'practice', ids: ['prop3'] },
+  meal_8:       { type: 'meal', index: 8 },
+  checkin_pm:   { type: 'scores' },
+  meal_9:       { type: 'meal', index: 9 },
+  winddown:     { type: 'practice', ids: ['screens_off', 'magnesium'] },
+  bed:          { type: 'practice', ids: ['bed_time'] },
+}
+
+// data: { practices, mealCount, waterOz, scoreCount }
+// Returns { [promptId]: 'done' | 'partial' | null }.
+export function deriveScheduleStatus(schedule, data = {}) {
+  const { practices = {}, mealCount = 0, waterOz = 0, scoreCount = 0 } = data
+  const out = {}
+  let waterTarget = 0
+
+  schedule.forEach(p => {
+    const src = PROMPT_SOURCES[p.id] || { type: 'info' }
+    waterTarget += p.water || 0
+
+    if (src.type === 'info') { out[p.id] = null; return }
+
+    if (src.type === 'practice') {
+      const done = src.ids.filter(id => practices[id]).length
+      out[p.id] = done === src.ids.length ? 'done' : done > 0 ? 'partial' : null
+      return
+    }
+    if (src.type === 'meal') { out[p.id] = mealCount >= src.index ? 'done' : null; return }
+    if (src.type === 'water') { out[p.id] = waterOz >= waterTarget ? 'done' : null; return }
+    // Score entries aren't timestamped, so a morning and an evening check-in
+    // cannot be told apart -- both read as done once any score is logged.
+    if (src.type === 'scores') { out[p.id] = scoreCount > 0 ? 'done' : null; return }
+    out[p.id] = null
+  })
+  return out
+}
+
+// Which prompts can actually be completed (used for the progress ring).
+export const TRACKABLE_PROMPTS = Object.entries(PROMPT_SOURCES)
+  .filter(([, v]) => v.type !== 'info')
+  .map(([k]) => k)

@@ -1,4 +1,3 @@
-import { useState } from 'react'
 import RabbitPixel from './RabbitPixel'
 import { getAdaptiveScore, moodFromScore, MOOD_MESSAGES, getBars } from '../lib/pet'
 import { TASK_GROUPS } from '../lib/constants'
@@ -20,24 +19,13 @@ function MiniBar({ label, value, color }) {
   )
 }
 
-export default function PetPanel({ actual, practices, onAddWater, showToast }) {
-  const [busy, setBusy] = useState(false)
+export default function PetPanel({ actual, practices }) {
   const { score, target } = getAdaptiveScore(actual)
   // QA override: ?mood=0..5 forces a mood so all six states can be checked
   // without waiting for the day's data to move.
   const forced = new URLSearchParams(window.location.search).get('mood')
   const mood = forced !== null && forced !== '' ? Math.max(0, Math.min(5, Number(forced))) : moodFromScore(score)
   const bars = getBars(actual, TASK_GROUPS, practices)
-
-  async function water(oz) {
-    setBusy(true)
-    try {
-      await onAddWater(oz)
-    } catch {
-      showToast('Not saved — water not logged', 'var(--red)')
-    }
-    setBusy(false)
-  }
 
   const behind = k => (actual[k] || 0) < (target[k] || 0) * 0.85
 
@@ -65,19 +53,11 @@ export default function PetPanel({ actual, practices, onAddWater, showToast }) {
         <MiniBar label="Joy" value={bars.joy} color={BAR_COLORS.joy} />
       </div>
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <span className="eyebrow" style={{ flexShrink: 0 }}>Water</span>
-        {[8, 12, 16].map(oz => (
-          <button key={oz} disabled={busy} onClick={() => water(oz)} style={{
-            flex: 1, minHeight: 44, borderRadius: 10, border: '1.5px solid var(--bd)',
-            background: 'var(--bg)', color: 'var(--ink2)', fontSize: 12.5, fontWeight: 600,
-            cursor: 'pointer', opacity: busy ? .5 : 1,
-          }}>+{oz}oz</button>
-        ))}
-        {actual.bonusDone > 0 && (
-          <span className="mono" style={{ fontSize: 10, color: 'var(--green)', flexShrink: 0 }}>+{actual.bonusDone} bonus</span>
-        )}
-      </div>
+      {actual.bonusDone > 0 && (
+        <div className="mono" style={{ fontSize: 10, color: 'var(--green)', textAlign: 'center' }}>
+          +{actual.bonusDone} bonus practices
+        </div>
+      )}
     </div>
   )
 }

@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
-import { getDailyLog, upsertDailyLog, getPracticeLogs, togglePractice, getEpisodes, getScheduleSettings, getFoodEntries, addWater } from '../lib/db'
-import { getCurrentPhase, getDayNumber, CYCLE_PHASES, ALL_TASKS, SYMPTOMS, TASK_GROUPS, shiftSchedule } from '../lib/constants'
+import { getDailyLog, upsertDailyLog, getPracticeLogs, togglePractice, getEpisodes, getScheduleSettings, getFoodEntries } from '../lib/db'
+import { getCurrentPhase, getDayNumber, CYCLE_PHASES, ALL_TASKS, SYMPTOMS, TASK_GROUPS, shiftSchedule, deriveScheduleStatus, TRACKABLE_PROMPTS } from '../lib/constants'
 import ScheduleWidget from '../components/ScheduleWidget'
 import PetPanel from '../components/PetPanel'
 import { REQUIRED_PRACTICE_IDS } from '../lib/pet'
@@ -160,13 +160,15 @@ export default function Today({ showToast, openMetric, openEpisode, openSchedule
     bonusDone,
   }
 
-  async function handleAddWater(oz) {
-    const updated = await addWater(todayKey(), oz)
-    if (updated) setLog(l => ({ ...l, water_oz: updated.water_oz }))
-  }
-
   const schedule = shiftSchedule(settings?.wake_time || '07:30')
-  const completions = log.schedule_completions || {}
+  // Status is derived from what she actually logged, not from ticks on the
+  // schedule itself -- the schedule is a read-only view of the day.
+  const scheduleStatuses = deriveScheduleStatus(schedule, {
+    practices,
+    mealCount: foods.length,
+    waterOz: petActual.water,
+    scoreCount: Object.values(scores).filter(Boolean).length,
+  })
   // Same numbers the pet uses -- one calorie figure across the whole screen.
   const scheduleTotals = { calories: petActual.cal, water: petActual.water }
 
@@ -427,17 +429,13 @@ export default function Today({ showToast, openMetric, openEpisode, openSchedule
         </div>
 
         {/* Tamagotchi -- sits below Cycle */}
-        <PetPanel
-          actual={petActual}
-          practices={practices}
-          onAddWater={handleAddWater}
-          showToast={showToast}
-        />
+        <PetPanel actual={petActual} practices={practices} />
 
         <div className="section-label">Schedule <a onClick={openSchedule}>Open ›</a></div>
         <ScheduleWidget
           schedule={schedule}
-          completions={completions}
+          statuses={scheduleStatuses}
+          trackable={TRACKABLE_PROMPTS}
           totals={scheduleTotals}
           steps={fitbit?.steps}
           onOpen={openSchedule}

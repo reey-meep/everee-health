@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { getFoodEntries, createFoodEntry, deleteFoodEntry, getTriggerFoods, addTriggerFood } from '../lib/db'
+import { getFoodEntries, createFoodEntry, deleteFoodEntry, getTriggerFoods, addTriggerFood, addWater, getDailyLog } from '../lib/db'
 import { DEFAULT_TRIGGERS } from '../lib/constants'
 import { searchFood } from '../lib/google-health'
 
@@ -10,6 +10,7 @@ const todayKey = () => {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 const MIN = 1500, GOAL = 1800
+const WATER_MIN = 85, WATER_GOAL = 100
 const MEAL_TYPES = ['Breakfast', 'Morning snack', 'Lunch', 'Afternoon snack', 'Dinner', 'Evening snack', 'Drink']
 const TRIGGER_CATS = [{ id: 'histamine', label: 'Histamine', color: '#FF3B5C' }, { id: 'mast_cell', label: 'Mast cell', color: '#F0468A' }, { id: 'oas', label: 'OAS cluster', color: '#FF9500' }, { id: 'intolerance', label: 'Intolerance', color: '#5B5EF4' }, { id: 'lpr', label: 'LPR', color: '#00B4D8' }, { id: 'other', label: 'Other', color: '#A0A6B8' }]
 
@@ -17,6 +18,8 @@ export default function Body({ showToast }) {
   const [entries, setEntries] = useState([])
   const [triggers, setTriggers] = useState([])
   const [bodyTab, setBodyTab] = useState('food')
+  const [waterOz, setWaterOz] = useState(0)
+  const [waterBusy, setWaterBusy] = useState(false)
   const [sheet, setSheet] = useState(null)
   const [form, setForm] = useState({ meal_type: '', description: '', calories: '', protein_grams: '', dao_taken: false, oxbile_taken: false })
   const [tform, setTform] = useState({ food: '', trigger_category: '', severity: '' })
@@ -27,6 +30,7 @@ export default function Body({ showToast }) {
 
   useEffect(() => { loadEntries(); loadTriggers() }, [])
   async function loadEntries() { setEntries(await getFoodEntries(todayKey())) }
+    getDailyLog(todayKey()).then(l => setWaterOz(Number(l?.water_oz || 0))).catch(() => {})
   async function loadTriggers() { const d = await getTriggerFoods(); setTriggers(d.length > 0 ? d : DEFAULT_TRIGGERS) }
 
   function handleQuery(v) {
@@ -52,6 +56,19 @@ export default function Body({ showToast }) {
     if (fl.length) showToast(`⚠ ${fl[0]} on no-go list`, 'var(--amber)'); else showToast('Logged')
     setSheet(null); setForm({ meal_type: '', description: '', calories: '', protein_grams: '', dao_taken: false, oxbile_taken: false }); setQuery(''); setResults([])
     loadEntries()
+  }
+
+  // Water lives here with food, so every intake log has one home.
+  async function logWater(oz) {
+    setWaterBusy(true)
+    try {
+      const updated = await addWater(todayKey(), oz)
+      if (updated) setWaterOz(Number(updated.water_oz || 0))
+      showToast(`+${oz} oz`, 'var(--sky)')
+    } catch {
+      showToast('Not saved — water not logged', 'var(--red)')
+    }
+    setWaterBusy(false)
   }
 
   async function submitTrigger() {
@@ -87,6 +104,27 @@ export default function Body({ showToast }) {
           <span>0</span><span style={{ color: 'var(--amber)' }}>{MIN} min</span><span style={{ color: 'var(--green)' }}>{GOAL} goal</span>
         </div>
         {protein > 0 && <div className="mono" style={{ fontSize: 10, color: 'var(--ink3)', marginBottom: 10 }}>{protein.toFixed(0)}g protein today</div>}
+        <div className="card" style={{ padding: 14, marginBottom: 12 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 6 }}>
+            <span className="eyebrow">Water</span>
+            <span className="mono" style={{ fontSize: 11, color: waterOz >= WATER_MIN ? 'var(--green)' : 'var(--sky)' }}>
+              {Math.round(waterOz)}<span style={{ color: 'var(--ink4)' }}> / {WATER_GOAL} oz</span>
+            </span>
+          </div>
+          <div className="prog" style={{ marginBottom: 10 }}>
+            <div className="prog-fill" style={{ width: `${Math.min(waterOz / WATER_GOAL, 1) * 100}%`, background: waterOz >= WATER_MIN ? 'var(--green)' : 'var(--sky)' }} />
+          </div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            {[8, 12, 16].map(oz => (
+              <button key={oz} disabled={waterBusy} onClick={() => logWater(oz)} style={{
+                flex: 1, minHeight: 44, borderRadius: 10, border: '1.5px solid var(--bd)',
+                background: 'var(--bg)', color: 'var(--ink2)', fontSize: 13, fontWeight: 600,
+                cursor: 'pointer', opacity: waterBusy ? .5 : 1, fontFamily: 'inherit',
+              }}>+{oz} oz</button>
+            ))}
+          </div>
+        </div>
+
         <div style={{ display: 'flex', borderTop: '1px solid var(--bd)' }}>
           {['food', 'nogo'].map(t => <button key={t} onClick={() => setBodyTab(t)} style={{ flex: 1, padding: '11px', border: 'none', background: 'none', fontWeight: 700, fontSize: 13, color: bodyTab === t ? 'var(--indigo)' : 'var(--ink3)', borderBottom: bodyTab === t ? '2px solid var(--indigo)' : '2px solid transparent', cursor: 'pointer', fontFamily: 'inherit' }}>{t === 'food' ? 'Diary' : 'No-go list'}</button>)}
         </div>

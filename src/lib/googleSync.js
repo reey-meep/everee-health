@@ -48,18 +48,24 @@ export async function getConnectionStatus() {
 }
 
 async function callSync(body) {
-  const res = await fetch(`${FUNCTIONS}/sync-google-health`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${supabase.supabaseKey}`,
-      apikey: supabase.supabaseKey,
-    },
-    body: JSON.stringify(body),
-  })
-  const json = await res.json().catch(() => ({}))
-  if (!res.ok) return { ok: false, error: json?.error || `HTTP ${res.status}` }
-  return { ok: true, ...json }
+  // Never throws. A rejected fetch (CORS, offline, timeout) previously left the
+  // caller awaiting forever with a spinner that never stopped.
+  try {
+    const res = await fetch(`${FUNCTIONS}/sync-google-health`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${supabase.supabaseKey}`,
+        apikey: supabase.supabaseKey,
+      },
+      body: JSON.stringify(body),
+    })
+    const json = await res.json().catch(() => ({}))
+    if (!res.ok) return { ok: false, error: json?.error || `HTTP ${res.status}` }
+    return { ok: true, ...json }
+  } catch (e) {
+    return { ok: false, error: `Request failed: ${e?.message || e}. The sync may still have run — check Recent syncs.` }
+  }
 }
 
 export const syncToday = () => callSync({ action: 'sync' })

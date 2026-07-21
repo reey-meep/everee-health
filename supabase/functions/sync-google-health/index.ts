@@ -28,8 +28,16 @@ const TZ = 'America/Los_Angeles'
 
 const db = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!)
 
+const CORS = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, apikey, content-type',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+}
+
 const json = (b: unknown, s = 200) =>
-  new Response(JSON.stringify(b, null, 2), { status: s, headers: { 'Content-Type': 'application/json' } })
+  new Response(JSON.stringify(b, null, 2), {
+    status: s, headers: { 'Content-Type': 'application/json', ...CORS },
+  })
 
 const pad = (n: number) => String(n).padStart(2, '0')
 const localToday = () => {
@@ -190,6 +198,9 @@ async function writeDay(date: string, snap: Record<string, unknown>) {
 }
 
 Deno.serve(async req => {
+  // Preflight: the browser sends OPTIONS before a POST carrying auth headers.
+  if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS })
+
   let body: any = {}
   try { body = await req.json() } catch { /* cron sends none */ }
   const action = body.action || 'sync'

@@ -11,7 +11,7 @@ const todayKey = () => {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
-export default function More({ showToast, openMetric }) {
+export default function More({ showToast, openMetric, openHeart }) {
   const [insights, setInsights] = useState([])
   const [loading, setLoading] = useState(true)
   const [connected, setConnected] = useState(isConnected())
@@ -222,10 +222,21 @@ export default function More({ showToast, openMetric }) {
         )}
 
         {/* ── NOT YET BUILT ────────────────────────────────── */}
+        {/* Heart monitor is reachable now -- it holds the episode walkthrough. */}
+        <div className="section-label" style={{ marginTop: 4 }}>During an episode</div>
+        <div className="card">
+          <div className="row" onClick={openHeart} style={{ cursor: 'pointer' }}>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--ink)' }}>Heart monitor</div>
+              <div style={{ fontSize: 11.5, color: 'var(--ink3)', marginTop: 2 }}>Episode walkthrough · Rylie&rsquo;s view</div>
+            </div>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--ink4)" strokeWidth="2"><polyline points="9 18 15 12 9 6" /></svg>
+          </div>
+        </div>
+
         <div className="section-label" style={{ marginTop: 4 }}>Not yet built</div>
         <div className="card">
           {[
-            { label: 'Heart monitor', sub: 'Rylie mode + HR tracking' },
             { label: 'Medications', sub: 'View your full medication list' },
             { label: 'Wellness plan', sub: 'Foundation phase protocol' },
             { label: 'Analytics', sub: 'Full correlation dashboard' },

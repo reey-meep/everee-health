@@ -6,6 +6,7 @@ import More from './pages/More'
 import MetricDetail from './pages/MetricDetail'
 import EpisodeDetail from './pages/EpisodeDetail'
 import ScheduleDetail from './pages/ScheduleDetail'
+import Heart from './pages/Heart'
 import Toast from './components/Toast'
 import { handleAuthRedirect } from './lib/google-health'
 import { getDailyLog, getScheduleSettings, getFoodEntries, getPracticeLogs } from './lib/db'
@@ -70,11 +71,12 @@ export default function App() {
     setDetail({ type: 'schedule' })
   }
 
+  function openHeart() { setDetail({ type: 'heart' }) }
   function openMetric(data) { setDetail({ type: 'metric', data }) }
   function openEpisode(data) { setDetail({ type: 'episode', data }) }
   function closeDetail() { setDetail(null) }
 
-  const pageProps = { showToast, openMetric, openEpisode, openSchedule }
+  const pageProps = { showToast, openMetric, openEpisode, openSchedule, openHeart }
 
   return (
     <>
@@ -91,6 +93,17 @@ export default function App() {
         <div style={{ position: 'fixed', inset: 0, zIndex: 200, background: 'var(--bg)', overflowY: 'auto' }} className="slide-up">
           {detail.type === 'metric' && <MetricDetail data={detail.data} onBack={closeDetail} />}
           {detail.type === 'episode' && <EpisodeDetail data={detail.data} onBack={closeDetail} showToast={showToast} />}
+          {detail.type === 'heart' && (
+            <div style={{ minHeight: '100svh' }}>
+              <div className="detail-header">
+                <button className="back-btn" onClick={closeDetail}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="15 18 9 12 15 6" /></svg>
+                  Back
+                </button>
+              </div>
+              <Heart showToast={showToast} />
+            </div>
+          )}
           {detail.type === 'schedule' && (
             <ScheduleDetail
               schedule={shiftSchedule(schedState.wake)}

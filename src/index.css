@@ -150,3 +150,58 @@ html, body { font-family: 'Plus Jakarta Sans', -apple-system, sans-serif; backgr
 .fade-up { animation: fadeUp .18s ease-out; }
 @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
 .slide-up { animation: slideUp .22s cubic-bezier(.4,0,.2,1); }
+
+/* ── Styles for the Heart monitor screen ─────────────────────
+   Heart.js was written against a set of classes and variables that were never
+   added to this stylesheet, which is why it was left unreachable. */
+:root {
+  --serif: 'Plus Jakarta Sans', Georgia, serif;
+  --border: 1px solid #E8E9EF;
+  --r: 16px;
+  --s1: 6px;
+  --s2: 10px;
+  --s3: 16px;
+  --indigo-l: #EEF0FF;
+  --pink-l: #FEF0F6;
+  --amber-l: #FFF4E0;
+}
+
+.view { display: flex; flex-direction: column; min-height: 100svh; background: var(--bg); padding-bottom: calc(var(--nav) + 24px); }
+.view h1 { font-size: 27px; font-weight: 800; letter-spacing: -.03em; margin-bottom: 4px; }
+.view p { font-size: 12.5px; color: var(--ink2); line-height: 1.55; }
+.section { padding: 0 16px; margin-bottom: 14px; }
+.page-eyebrow { font-family: var(--mono); font-size: 9px; font-weight: 500; letter-spacing: .1em; text-transform: uppercase; color: var(--ink3); }
+.label { font-family: var(--mono); font-size: 9px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: var(--ink3); }
+
+.card-head { padding: 13px 14px 0; }
+.card-title { font-size: 14px; font-weight: 700; color: var(--ink); }
+.card-body { padding: 12px 14px; }
+
+/* 44px minimum touch target — these are pressed mid-episode. */
+.btn { min-height: 44px; padding: 0 16px; border-radius: 11px; border: 1.5px solid var(--bd); background: var(--surface); color: var(--ink); font-family: inherit; font-size: 13.5px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 6px; transition: background .15s, border-color .15s; }
+.btn-primary { background: var(--indigo); border-color: var(--indigo); color: #fff; }
+.btn-secondary { background: var(--bg); color: var(--ink2); }
+.btn-sm { min-height: 38px; padding: 0 12px; font-size: 12.5px; border-radius: 9px; }
+.btn-full { width: 100%; }
+.btn:disabled { opacity: .5; cursor: default; }
+
+.chip-wrap { display: flex; flex-wrap: wrap; gap: 7px; }
+.form-group { margin-bottom: 12px; }
+.form-group input, .form-group textarea, .form-group select { width: 100%; min-height: 44px; padding: 10px 12px; border: 1.5px solid var(--bd); border-radius: 10px; background: var(--bg); font-family: inherit; font-size: 14px; color: var(--ink); }
+
+.modal-overlay { position: fixed; inset: 0; z-index: 300; background: rgba(10,11,15,.45); display: flex; align-items: flex-end; justify-content: center; }
+.modal { width: 100%; max-width: 520px; background: var(--surface); border-radius: 18px 18px 0 0; padding: 16px 16px calc(16px + env(safe-area-inset-bottom)); max-height: 88svh; overflow-y: auto; }
+.modal-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+.modal-title { font-size: 16px; font-weight: 800; }
+.modal-close { min-height: 44px; min-width: 44px; border: none; background: none; color: var(--ink3); font-size: 20px; cursor: pointer; font-family: inherit; }
+
+.banner { border-radius: 10px; padding: 10px 12px; font-size: 12px; line-height: 1.5; margin-bottom: 10px; }
+.banner-amber { background: var(--amber-xl); border: 1px solid var(--amber); color: #7A4500; }
+
+.cal-bar-wrap { height: 7px; border-radius: 4px; background: var(--bg); overflow: hidden; }
+.cal-bar-fill { height: 100%; border-radius: 4px; transition: width .3s; }
+
+/* Used on the live heart-rate readout. Held still under reduced-motion. */
+.pulsing { animation: pulseSoft 1.6s ease-in-out infinite; }
+@keyframes pulseSoft { 0%, 100% { opacity: 1 } 50% { opacity: .55 } }
+@media (prefers-reduced-motion: reduce) { .pulsing { animation: none } }

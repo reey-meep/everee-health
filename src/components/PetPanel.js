@@ -1,60 +1,94 @@
+import { useState } from 'react'
 import RabbitPixel from './RabbitPixel'
-import { getAdaptiveScore, moodFromScore, MOOD_MESSAGES, getBars } from '../lib/pet'
+import { getAdaptiveScore, stateFromScore, PET_STATES, getBars, MIND_GROUPS, JOY_GROUPS } from '../lib/pet'
 import { TASK_GROUPS } from '../lib/constants'
 
-const BAR_COLORS = { body: 'var(--amber)', mind: 'var(--indigo)', joy: 'var(--pink)' }
+const BARS = [
+  {
+    key: 'body', label: 'Body', color: 'var(--amber)',
+    what: 'Calories, water and steps, against where they should be by this hour.',
+  },
+  {
+    key: 'mind', label: 'Mind', color: 'var(--indigo)',
+    what: 'The clinical protocol — medications, vestibular drills, vagal practices.',
+  },
+  {
+    key: 'joy', label: 'Joy', color: 'var(--pink)',
+    what: 'Mental and emotional wellness — the practices that are for you, not your illness.',
+  },
+]
 
-function MiniBar({ label, value, color }) {
-  const pct = Math.max(0, Math.min(value, 1))
-  return (
-    <div style={{ flex: 1 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3 }}>
-        <span className="eyebrow">{label}</span>
-        <span className="mono" style={{ fontSize: 9.5, color: 'var(--ink3)' }}>{Math.round(pct * 100)}%</span>
-      </div>
-      <div style={{ height: 5, borderRadius: 3, background: 'var(--bg)', overflow: 'hidden' }}>
-        <div style={{ height: '100%', width: `${pct * 100}%`, background: color, borderRadius: 3, transition: 'width .3s' }} />
-      </div>
-    </div>
-  )
+function groupCounts(groupIds, practices) {
+  const tasks = TASK_GROUPS.filter(g => groupIds.includes(g.id)).flatMap(g => g.tasks)
+  return { done: tasks.filter(t => practices[t.id]).length, total: tasks.length }
 }
 
 export default function PetPanel({ actual, practices }) {
+  const [explain, setExplain] = useState(null)
   const { score, target } = getAdaptiveScore(actual)
-  // QA override: ?mood=0..5 forces a mood so all six states can be checked
-  // without waiting for the day's data to move.
-  const forced = new URLSearchParams(window.location.search).get('mood')
-  const mood = forced !== null && forced !== '' ? Math.max(0, Math.min(5, Number(forced))) : moodFromScore(score)
+
+  // QA override: ?state=0..3 forces a state without waiting for the day to move.
+  const forced = new URLSearchParams(window.location.search).get('state')
+  const state = forced !== null && forced !== ''
+    ? Math.max(0, Math.min(3, Number(forced)))
+    : stateFromScore(score)
+
+  const meta = PET_STATES[state]
   const bars = getBars(actual, TASK_GROUPS, practices)
 
-  const behind = k => (actual[k] || 0) < (target[k] || 0) * 0.85
+  const detail = {
+    body: `${Math.round(actual.cal || 0)}/${Math.round(target.cal)} cal · ${Math.round(actual.water || 0)}/${Math.round(target.water)} oz · ${Math.round(actual.steps || 0)}/${Math.round(target.steps)} steps`,
+    mind: (() => { const c = groupCounts(MIND_GROUPS, practices); return `${c.done} of ${c.total} practices done` })(),
+    joy: (() => { const c = groupCounts(JOY_GROUPS, practices); return `${c.done} of ${c.total} practices done` })(),
+  }
 
   return (
     <div className="card" style={{ padding: '16px 16px 14px', marginBottom: 10 }}>
-      <RabbitPixel mood={mood} size={168} />
+      <RabbitPixel state={state} size={168} />
 
-      <div style={{ textAlign: 'center', marginTop: 2, marginBottom: 14 }}>
-        <div style={{ fontSize: 14.5, fontWeight: 700 }}>{MOOD_MESSAGES[mood]}</div>
-        <div className="mono" style={{ fontSize: 10, color: 'var(--ink3)', marginTop: 3 }}>
-          {Math.round(actual.cal || 0)}/{Math.round(target.cal)} cal
-          <span style={{ color: behind('cal') ? 'var(--amber)' : 'var(--ink4)' }}> · </span>
-          {Math.round(actual.water || 0)}/{Math.round(target.water)} oz
-          <span style={{ color: behind('water') ? 'var(--amber)' : 'var(--ink4)' }}> · </span>
-          {Math.round(actual.steps || 0)}/{Math.round(target.steps)} steps
-        </div>
-        <div className="mono" style={{ fontSize: 9, color: 'var(--ink4)', marginTop: 2 }}>
-          target for {new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}, not end of day
+      <div style={{ textAlign: 'center', marginTop: 4, marginBottom: 14 }}>
+        <div style={{ fontSize: 14.5, fontWeight: 700 }}>{meta.message}</div>
+        <div className="mono" style={{ fontSize: 9.5, color: 'var(--ink4)', marginTop: 4, letterSpacing: '.06em', textTransform: 'uppercase' }}>
+          {meta.label} · {meta.hint}
         </div>
       </div>
 
-      <div style={{ display: 'flex', gap: 10, marginBottom: 12 }}>
-        <MiniBar label="Body" value={bars.body} color={BAR_COLORS.body} />
-        <MiniBar label="Mind" value={bars.mind} color={BAR_COLORS.mind} />
-        <MiniBar label="Joy" value={bars.joy} color={BAR_COLORS.joy} />
+      <div style={{ display: 'flex', gap: 10 }}>
+        {BARS.map(b => {
+          const pct = Math.max(0, Math.min(bars[b.key], 1))
+          const open = explain === b.key
+          return (
+            <div key={b.key} style={{ flex: 1, cursor: 'pointer' }} onClick={() => setExplain(open ? null : b.key)}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3 }}>
+                <span className="eyebrow" style={{ color: open ? b.color : undefined }}>{b.label}</span>
+                <span className="mono" style={{ fontSize: 9.5, color: open ? b.color : 'var(--ink3)' }}>
+                  {Math.round(pct * 100)}%
+                </span>
+              </div>
+              <div style={{ height: 5, borderRadius: 3, background: 'var(--bg)', overflow: 'hidden' }}>
+                <div style={{ height: '100%', width: `${pct * 100}%`, background: b.color, borderRadius: 3, transition: 'width .3s' }} />
+              </div>
+            </div>
+          )
+        })}
       </div>
+
+      {/* What feeds each bar was opaque -- tapping one now explains it. */}
+      {explain ? (
+        <div style={{ marginTop: 12, paddingTop: 10, borderTop: '1px solid var(--bd)' }}>
+          <div style={{ fontSize: 12, color: 'var(--ink2)', lineHeight: 1.55 }}>
+            {BARS.find(b => b.key === explain).what}
+          </div>
+          <div className="mono" style={{ fontSize: 10, color: 'var(--ink3)', marginTop: 5 }}>{detail[explain]}</div>
+        </div>
+      ) : (
+        <div className="mono" style={{ fontSize: 9, color: 'var(--ink4)', marginTop: 10, textAlign: 'center' }}>
+          tap a bar to see what feeds it
+        </div>
+      )}
 
       {actual.bonusDone > 0 && (
-        <div className="mono" style={{ fontSize: 10, color: 'var(--green)', textAlign: 'center' }}>
+        <div className="mono" style={{ fontSize: 10, color: 'var(--green)', textAlign: 'center', marginTop: 8 }}>
           +{actual.bonusDone} bonus practices
         </div>
       )}

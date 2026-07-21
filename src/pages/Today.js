@@ -63,7 +63,7 @@ export default function Today({ showToast, openMetric, openEpisode, openSchedule
   const [weather, setWeather] = useState(null)
   const [episodes, setEpisodes] = useState([])
   const [openGroup, setOpenGroup] = useState('medications')
-  const [showAllSymptoms, setShowAllSymptoms] = useState(false)
+  const [showScorers, setShowScorers] = useState(false)
   const [settings, setSettings] = useState(null)
   const [foods, setFoods] = useState([])
 
@@ -146,7 +146,8 @@ export default function Today({ showToast, openMetric, openEpisode, openSchedule
   const C = 2 * Math.PI * 28
   const highRisk = ['luteal_late', 'pms'].includes(log.cycle_phase)
   const stepPct = fitbit?.steps ? Math.min(fitbit.steps / 7500, 1) : 0
-  const displaySymptoms = showAllSymptoms ? SYMPTOMS : SYMPTOMS.slice(0, 3)
+  // All five or none -- the ring and bars above stay visible either way.
+  const displaySymptoms = showScorers ? SYMPTOMS : []
   // Pet inputs are derived, never manually entered: calories from the food
   // diary, water from daily_logs, steps from Google Health, practices from
   // practice_logs. Required items are the 10 that actually exist in TASK_GROUPS.
@@ -328,7 +329,7 @@ export default function Today({ showToast, openMetric, openEpisode, openSchedule
         <div>
           <div className="section-label">
             Symptom scores
-            <a onClick={() => setShowAllSymptoms(v => !v)}>{showAllSymptoms ? 'Show less ›' : 'Show all ›'}</a>
+            <a onClick={() => setShowScorers(v => !v)}>{showScorers ? 'Hide ›' : 'Log scores ›'}</a>
           </div>
           <div className="card">
             {/* Readiness ring */}

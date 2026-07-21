@@ -166,16 +166,6 @@ export const TASK_GROUPS = [
       { id: 'face_wash', text: 'Washed face' },
     ]
   },
-  {
-    id: 'tracking',
-    label: 'Tracking',
-    tasks: [
-      { id: 'cycle', text: 'Logged cycle day' },
-      { id: 'food_log', text: 'Logged food diary' },
-      { id: 'episode_log', text: 'Logged any episode' },
-      { id: 'packet', text: 'Filled in daily packet' },
-    ]
-  }
 ]
 
 export const ALL_TASKS = TASK_GROUPS.flatMap(g => g.tasks)

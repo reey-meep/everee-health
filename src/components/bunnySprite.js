@@ -56,30 +56,30 @@ const BASE_NO_EARS = [
 
 const EAR_L = [
   '........KKK...............',
-  '.......KBBS...............',
-  '......KBBBS...............',
-  '......KBBSS...............',
+  '.......KBBSK..............',
+  '......KBBBSK..............',
+  '......KBBSSK..............',
   '......KBBSK...............',
   '......KBSSK...............',
   '.....KBBSSK...............',
   '.....KBBSPK...............',
   '.....KBSSPP...............',
   '.....KBSSPK...............',
-  '......KKKKB...............',
+  '......KKKK................',
 ]
 
 const EAR_R = [
   '................KKK.......',
-  '...........K...KBBBK......',
-  '...........K..KBBPBK......',
-  '...........K.KBBPPBK......',
+  '...............KBBBK......',
+  '..............KBBPBK......',
+  '.............KBBPPBK......',
   '.............KBBPBBK......',
   '............KBBPPBK.......',
   '............KBBPBBK.......',
   '............KBPPBK........',
   '...........KBBPBBK........',
   '...........BBPBBK.........',
-  '...........BPBBK..........',
+  '..........BBPBBK..........',
 ]
 
 // Eyes are 2x2 blocks at rows 17-18, cols 2-3 and 8-9 in the source art.
@@ -89,22 +89,22 @@ const EYE_ROW_TOP = 17
 // Tail occupies the right edge; shifted down for the droopy pose.
 const TAIL_MIN_COL = 21
 
-// Ear offsets per pose: [dxLeft, dxRight, dy]. Down = lower and splayed wider.
-const EAR_OFFSET = {
-  up:   [0, 0, 0],
-  mid:  [-1, 1, 3],
-  down: [-2, 2, 6],
-}
+// Ear offsets per state: [dxLeft, dxRight, dy]. Critical droops lowest and
+// splays widest; flourishing sits at the source art's own position.
+const EAR_OFFSET = [
+  [-2, 2, 7],   // critical
+  [-1, 1, 4],   // poor
+  [0, 0, 1],    // healthy
+  [0, 0, 0],    // flourishing
+]
 
-// 0 desaturated grey -> 5 warm. Keys match the sprite glyphs; the source
-// palette is level 3, so her artwork is what shows at "on track".
+// One palette per state. Level 2 (healthy) is the source art's own palette,
+// so her artwork is what shows when she's on track.
 const PALETTES = [
-  { K: '#2E2C2E', B: '#BDBABC', S: '#A09B9D', P: '#948486', N: '#948486' },
-  { K: '#2D2A2C', B: '#CCC6C6', S: '#AEA7A7', P: '#A38F91', N: '#A38F91' },
-  { K: '#2B2729', B: '#DCD2D0', S: '#B9ACAB', P: '#AD9698', N: '#AD9698' },
-  { K: '#000000', B: '#E9DDDB', S: '#C3B4B3', P: '#B7A0A1', N: '#B7A0A1' },
-  { K: '#241F21', B: '#F0E2DA', S: '#CFBBAF', P: '#C79BA6', N: '#C79BA6' },
-  { K: '#241F21', B: '#F8E9D6', S: '#DCC4A6', P: '#D497AE', N: '#D497AE' },
+  { K: '#2E2C2E', B: '#BDBABC', S: '#A09B9D', P: '#948486', N: '#948486' }, // critical
+  { K: '#2C2829', B: '#D2C8C6', S: '#B2A6A4', P: '#A68F92', N: '#A68F92' }, // poor
+  { K: '#000000', B: '#E9DDDB', S: '#C3B4B3', P: '#B7A0A1', N: '#B7A0A1' }, // healthy (source art)
+  { K: '#241F21', B: '#F8E9D6', S: '#DCC4A6', P: '#D497AE', N: '#D497AE' }, // flourishing
 ]
 
 export { W, H, BASE_NO_EARS, EAR_L, EAR_R, EYE_CELLS, EYE_ROW_TOP, TAIL_MIN_COL, EAR_OFFSET, PALETTES }

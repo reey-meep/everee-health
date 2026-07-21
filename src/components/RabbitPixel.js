@@ -8,12 +8,6 @@ import {
 // No idle animation by request -- the only motion is a slow colour transition,
 // so she warms up gradually instead of twitching. Pose changes in three steps.
 
-function poseFor(mood) {
-  if (mood <= 1) return 'down'
-  if (mood <= 3) return 'mid'
-  return 'up'
-}
-
 function blit(grid, sprite, dx, dy) {
   sprite.forEach((row, y) => {
     [...row].forEach((ch, x) => {
@@ -25,11 +19,10 @@ function blit(grid, sprite, dx, dy) {
   })
 }
 
-export default function RabbitPixel({ mood = 3, size = 168 }) {
-  const lvl = Math.max(0, Math.min(5, Math.round(mood)))
+export default function RabbitPixel({ state = 2, size = 168 }) {
+  const lvl = Math.max(0, Math.min(3, Math.round(state)))
   const pal = PALETTES[lvl]
-  const pose = poseFor(lvl)
-  const [dxL, dxR, dy] = EAR_OFFSET[pose]
+  const [dxL, dxR, dy] = EAR_OFFSET[lvl]
 
   // Ears first, then the head/body on top, so the ears sit behind the head
   // exactly as they do in the source art.
@@ -38,7 +31,12 @@ export default function RabbitPixel({ mood = 3, size = 168 }) {
   blit(grid, EAR_R, dxR, dy)
   blit(grid, BASE_NO_EARS, 0, 0)
 
-  if (pose === 'down') {
+  if (lvl >= 3) {
+    // Bright eyes when flourishing.
+    EYE_CELLS.forEach(([x, y]) => { if (y === EYE_ROW_TOP) grid[y][x] = 'K' })
+  }
+
+  if (lvl === 0) {
     // Sleepy slits: drop the upper half of each 2x2 eye.
     EYE_CELLS.forEach(([x, y]) => {
       if (y === EYE_ROW_TOP) grid[y][x] = 'B'
@@ -74,7 +72,7 @@ export default function RabbitPixel({ mood = 3, size = 168 }) {
       shapeRendering="crispEdges"
       style={{ display: 'block', margin: '0 auto' }}
       role="img"
-      aria-label={`Pixel bunny, mood ${lvl} of 5`}
+      aria-label={`Pixel bunny, state ${lvl} of 3`}
     >
       {rects}
     </svg>

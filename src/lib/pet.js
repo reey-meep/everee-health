@@ -102,23 +102,21 @@ export function getAdaptiveScore(actual, now = new Date()) {
   }
 }
 
-export function moodFromScore(score) {
-  if (score < 0.3) return 0
-  if (score < 0.5) return 1
-  if (score < 0.8) return 2
-  if (score < 1.0) return 3
-  if (score < 1.2) return 4
-  return 5
-}
-
-export const MOOD_MESSAGES = [
-  'She needs you right now',
-  'Getting there, keep going',
-  'Making progress today',
-  'On track — good job',
-  'Doing really well today',
-  'Thriving — she is so happy',
+// Four states, driven by the time-adaptive score (progress vs. where you
+// should be at this hour -- not end-of-day totals).
+export const PET_STATES = [
+  { id: 'critical',    label: 'Critical',    message: 'She needs you right now',      hint: 'Well behind for this time of day' },
+  { id: 'poor',        label: 'Poor',        message: 'Falling behind — one small step', hint: 'Under where you should be by now' },
+  { id: 'healthy',     label: 'Healthy',     message: 'On track — good job',          hint: 'Roughly where you should be' },
+  { id: 'flourishing', label: 'Flourishing', message: 'Thriving — she is so happy',   hint: 'Ahead of the curve for this hour' },
 ]
+
+export function stateFromScore(score) {
+  if (score < 0.5) return 0   // critical
+  if (score < 0.8) return 1   // poor
+  if (score < 1.1) return 2   // healthy
+  return 3                    // flourishing
+}
 
 // Body / mind / joy groupings. The spec named these bars but did not define
 // which practices feed them; this is an interpretation, not a spec quote.

@@ -88,6 +88,7 @@ export const TASK_GROUPS = [
       { id: 'dmannose', text: 'Took D-mannose' },
       { id: 'probiotic', text: 'Took probiotic' },
       { id: 'iron', text: 'Took iron and vitamin C' },
+      { id: 'magnesium', text: 'Took magnesium' },
       { id: 'prozac', text: 'Took Prozac' },
       { id: 'prop1', text: 'Took propranolol dose 1 on alarm' },
       { id: 'prop2', text: 'Took propranolol dose 2 on alarm' },
@@ -143,6 +144,7 @@ export const TASK_GROUPS = [
     label: 'Sleep',
     tasks: [
       { id: 'screens_off', text: 'Turned screens off 30 min before bed' },
+      { id: 'teeth_pm', text: 'Brushed teeth evening' },
       { id: 'mouth_tape', text: 'Put on mouth tape' },
       { id: 'window', text: 'Opened window' },
       { id: 'bed_time', text: 'Got into bed by 9:30pm left side head elevated' },
@@ -161,6 +163,7 @@ export const TASK_GROUPS = [
       { id: 'cell_song', text: 'Sang happy cell song' },
       { id: 'incense', text: 'Lit incense' },
       { id: 'shower', text: 'Showered' },
+      { id: 'face_wash', text: 'Washed face' },
     ]
   },
   {
@@ -247,10 +250,30 @@ export function shiftSchedule(wakeTime = '07:30') {
   return SCHEDULE.map(s => ({ ...s, time: toHHMM(toMin(s.time) + delta) }))
 }
 
-// Next prompt that hasn't been actioned yet, given completions for today.
+// Next prompt that hasn't been actioned yet.
+//
+// An overdue prompt must NOT silently disappear once its time passes -- the
+// original version jumped straight to the next upcoming item, which meant a
+// missed Propranolol #3 vanished from view at 17:31. Late doses are exactly
+// what this app exists to catch.
+//
+// Priority: overdue critical  ->  recently overdue  ->  next upcoming.
+export const OVERDUE_WINDOW_MIN = 90
+
 export function nextPrompt(schedule, completions = {}, now = new Date()) {
   const mins = now.getHours() * 60 + now.getMinutes()
   const pending = schedule.filter(s => !completions[s.id])
+
+  const overdue = pending.filter(s => toMin(s.time) < mins)
+
+  // A critical dose stays surfaced all day until it is confirmed or skipped.
+  const criticalLate = overdue.find(s => s.critical)
+  if (criticalLate) return criticalLate
+
+  // Anything else stays surfaced for a window, then yields to what's next.
+  const recentLate = overdue.filter(s => mins - toMin(s.time) <= OVERDUE_WINDOW_MIN)
+  if (recentLate.length) return recentLate[recentLate.length - 1]
+
   return pending.find(s => toMin(s.time) >= mins) || null
 }
 

@@ -25,8 +25,11 @@ export default function ScheduleWidget({ schedule, completions, totals, steps, o
   const pct = schedule.length ? done / schedule.length : 0
   const C = 2 * Math.PI * 22
 
+  const late = mins != null && mins < 0
+  const ago = late ? -mins : 0
   const until = mins == null ? null
-    : mins <= 0 ? 'now'
+    : late ? (ago < 60 ? `${ago}m overdue` : `${Math.floor(ago / 60)}h ${ago % 60}m overdue`)
+    : mins === 0 ? 'now'
     : mins < 60 ? `in ${mins}m`
     : `in ${Math.floor(mins / 60)}h ${mins % 60}m`
 
@@ -58,7 +61,7 @@ export default function ScheduleWidget({ schedule, completions, totals, steps, o
                   {next.title}
                 </span>
               </div>
-              <div className="mono" style={{ fontSize: 10.5, color: next.critical && mins <= 0 ? 'var(--red)' : 'var(--ink3)', marginTop: 3 }}>
+              <div className="mono" style={{ fontSize: 10.5, color: late && next.critical ? 'var(--red)' : late ? 'var(--amber)' : 'var(--ink3)', fontWeight: late ? 700 : 400, marginTop: 3 }}>
                 {next.time} · {until}{next.critical ? ' · critical' : ''}
               </div>
             </>

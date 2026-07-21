@@ -23,10 +23,11 @@ const TARGET_CURVE = [
   [22,   1800, 100, 7500, 13],
 ]
 
-// The curve assumes 13 required practices. The app's TASK_GROUPS only contains
-// 10 of them (face_wash, teeth_pm and magnesium have no matching task), so an
-// unscaled target would cap the required-items ratio at 10/13 = 0.77 and the
-// pet could never reach a happy mood. Scale the target to what's achievable.
+// The curve assumes 13 required practices. All 13 now exist in TASK_GROUPS
+// (magnesium, face_wash and teeth_pm were added), so the scale factor is 1.
+// It is kept rather than removed so that if the required list and the curve
+// ever diverge again, the target rescales instead of silently capping the
+// score -- which would pin the pet to a sad mood with no visible cause.
 const CURVE_REQUIRED_TOTAL = 13
 
 // Real IDs from constants.js TASK_GROUPS. The spec's ids (prop_1, vest_1,
@@ -43,9 +44,11 @@ export const REQUIRED_PRACTICE_IDS = [
   'vest2',     // spec: vest_2
   'vest3',     // spec: vest_3
   'shower',
+  'face_wash',
+  'teeth_pm',
+  'magnesium',
 ]
-// Not present in TASK_GROUPS: face_wash, teeth_pm, magnesium.
-export const MISSING_REQUIRED_IDS = ['face_wash', 'teeth_pm', 'magnesium']
+export const MISSING_REQUIRED_IDS = []
 
 const REQ_SCALE = REQUIRED_PRACTICE_IDS.length / CURVE_REQUIRED_TOTAL
 

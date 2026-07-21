@@ -113,10 +113,23 @@ const rollup = async (token: string, type: string, date: string) => {
   })
   return r.ok ? (r.data?.rollupDataPoints || []) : []
 }
-const list = async (token: string, type: string, filter: string, pageSize = 1440) => {
-  const qs = new URLSearchParams({ pageSize: String(pageSize), filter })
-  const r = await gh(token, `users/me/dataTypes/${type}/dataPoints?${qs}`)
-  return r.ok ? (r.data?.dataPoints || []) : []
+// Follows nextPageToken. A single page capped at 5000 heart-rate points, which
+// silently truncated the day -- peak HR read 113 from a partial set where the
+// real peak was 127. Any max/min/avg over one page is meaningless.
+const list = async (token: string, type: string, filter: string, pageSize = 1440, maxPages = 8) => {
+  let all: any[] = []
+  let pageToken = ''
+  for (let page = 0; page < maxPages; page++) {
+    const qs = new URLSearchParams({ pageSize: String(pageSize), filter })
+    if (pageToken) qs.set('pageToken', pageToken)
+    const r = await gh(token, `users/me/dataTypes/${type}/dataPoints?${qs}`)
+    if (!r.ok) break
+    all = all.concat(r.data?.dataPoints || [])
+    pageToken = r.data?.nextPageToken || ''
+    if (!pageToken) break
+    if (page === maxPages - 1) console.warn(`${type}: hit ${maxPages}-page cap, day may be truncated`)
+  }
+  return all
 }
 const dayFilter = (type: string, field: string, date: string) => {
   const k = filterKey(type)

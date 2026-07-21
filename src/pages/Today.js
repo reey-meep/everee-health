@@ -256,7 +256,7 @@ export default function Today({ showToast, openMetric, openEpisode, openSchedule
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
                   <div className="bignum" style={{ color: 'var(--indigo)' }}>{fitbit.steps?.toLocaleString() ?? '--'}</div>
                   <div style={{ textAlign: 'right' }}>
-                    {fitbit.distance_km && <><div className="mono" style={{ fontSize: 18, color: 'var(--sky)', fontWeight: 300 }}>{fitbit.distance_km}<span style={{ fontSize: 10, color: 'var(--ink3)' }}>km</span></div><div className="mono" style={{ fontSize: 7.5, color: 'var(--ink3)', textTransform: 'uppercase' }}>distance</div></>}
+                    {fitbit.distance_km && <><div className="mono" style={{ fontSize: 18, color: 'var(--sky)', fontWeight: 300 }}>{(fitbit.distance_km / 1.609344).toFixed(2)}<span style={{ fontSize: 10, color: 'var(--ink3)' }}>mi</span></div><div className="mono" style={{ fontSize: 7.5, color: 'var(--ink3)', textTransform: 'uppercase' }}>distance</div></>}
                     {fitbit.floors && <><div className="mono" style={{ fontSize: 14, color: 'var(--sky)', marginTop: 4 }}>{fitbit.floors}<span style={{ fontSize: 9 }}> fl</span></div><div className="mono" style={{ fontSize: 7.5, color: 'var(--ink3)', textTransform: 'uppercase' }}>floors</div></>}
                   </div>
                 </div>

@@ -1,10 +1,10 @@
 import { useState, useEffect, useRef } from 'react'
-import { getDailyLog, upsertDailyLog, getPracticeLogs, togglePractice, getEpisodes, getScheduleSettings, getFoodEntries, saveDaySnapshot } from '../lib/db'
+import { getDailyLog, upsertDailyLog, getPracticeLogs, togglePractice, getEpisodes, getScheduleSettings, getFoodEntries } from '../lib/db'
 import { getCurrentPhase, getDayNumber, CYCLE_PHASES, ALL_TASKS, SYMPTOMS, TASK_GROUPS, shiftSchedule, deriveScheduleStatus, TRACKABLE_PROMPTS, SCHEDULE_TARGETS, wakeTimeFor } from '../lib/constants'
 import ScheduleWidget from '../components/ScheduleWidget'
 import PetPanel from '../components/PetPanel'
 import { REQUIRED_PRACTICE_IDS } from '../lib/pet'
-import { fetchDaySnapshot, fetchCurrentWeather, isConnected } from '../lib/google-health'
+import { fetchCurrentWeather } from '../lib/google-health'
 
 // Local calendar date, not UTC. Recomputed per call so a PWA left open
 // past midnight rolls over instead of writing to yesterday's key.
@@ -59,7 +59,7 @@ function Carousel({ children }) {
 export default function Today({ showToast, openMetric, openEpisode, openSchedule }) {
   const [log, setLog] = useState({})
   const [practices, setPractices] = useState({})
-  const [fitbit, setFitbit] = useState(null)
+
   const [weather, setWeather] = useState(null)
   const [episodes, setEpisodes] = useState([])
   const [openGroup, setOpenGroup] = useState('medications')
@@ -90,15 +90,9 @@ export default function Today({ showToast, openMetric, openEpisode, openSchedule
       const w = await fetchCurrentWeather(pos.coords.latitude, pos.coords.longitude)
       if (w) { setWeather(w); upsertDailyLog(todayKey(), { weather_temp: w.temp, weather_pressure: w.pressure }) }
     } catch {}
-    if (isConnected()) {
-      const s = await fetchDaySnapshot(todayKey())
-      if (s) {
-        setFitbit(s)
-        if (s.sleep_hours && !currentLog.sleep_hours) upsertDailyLog(todayKey(), { sleep_hours: s.sleep_hours })
-        // Persist the rest of the snapshot so trends have something to chart.
-        saveDaySnapshot(todayKey(), s).catch(() => {})
-      }
-    }
+    // Metrics are written to daily_logs by the sync Edge Function, which runs on
+    // a schedule with the app closed. Nothing is fetched from Google here.
+
   }
 
   // Each of these updates the UI optimistically, then rolls the change back and
@@ -150,6 +144,17 @@ export default function Today({ showToast, openMetric, openEpisode, openSchedule
   const pct = done / total
   const C = 2 * Math.PI * 28
   const highRisk = ['luteal_late', 'pms'].includes(log.cycle_phase)
+  // Shaped like the old snapshot so the existing widgets keep working.
+  const fitbit = (log.steps != null || log.resting_hr != null || log.sleep_hours != null || log.hrv != null)
+    ? {
+        steps: log.steps, distance_km: log.distance_km, floors: log.floors,
+        active_zone_minutes: log.active_zone_minutes, cardio_minutes: log.active_zone_minutes,
+        resting_hr: log.resting_hr, avg_hr: log.avg_hr, peak_hr: log.peak_hr,
+        hrv: log.hrv, spo2: log.spo2, respiratory_rate: log.respiratory_rate,
+        sleep_hours: log.sleep_hours,
+      }
+    : null
+
   const stepPct = fitbit?.steps ? Math.min(fitbit.steps / SCHEDULE_TARGETS.steps.min, 1) : 0
   const stepsOverCeiling = (fitbit?.steps || 0) > SCHEDULE_TARGETS.steps.ceiling
   // All five or none -- the ring and bars above stay visible either way.

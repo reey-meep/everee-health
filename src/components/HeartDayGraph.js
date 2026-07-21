@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { fetchHeartRatePoints, isConnected } from '../lib/google-health'
+import { fetchHrDay, getConnectionStatus } from '../lib/googleSync'
 import { getHRTags } from '../lib/db'
 import { HR_TAG_CATEGORIES } from '../lib/constants'
 
@@ -25,14 +25,13 @@ export default function HeartDayGraph() {
     let live = true
     setPoints(null); setErr('')
     ;(async () => {
-      if (!isConnected()) { if (live) { setPoints([]); setErr('Connect Fitbit in More to see heart rate.') } return }
+      const st = await getConnectionStatus()
+      if (!st.connected) { if (live) { setPoints([]); setErr('Connect Fitbit in More to see heart rate.') } return }
       try {
-        const pts = await fetchHeartRatePoints(key)
-        const mapped = pts
-          .map(p => ({
-            t: new Date(p?.heartRate?.sampleTime?.physicalTime || p?.heartRate?.sampleTime?.civilTime).getTime(),
-            v: Number(p?.heartRate?.beatsPerMinute),
-          }))
+        const r = await fetchHrDay(key)
+        if (!r.ok) { if (live) { setPoints([]); setErr(r.error || 'Could not load heart rate.') } return }
+        const mapped = (r.points || [])
+          .map(p => ({ t: new Date(p.t).getTime(), v: Number(p.v) }))
           .filter(p => Number.isFinite(p.t) && Number.isFinite(p.v))
           .sort((a, b) => a.t - b.t)
         if (live) setPoints(mapped)

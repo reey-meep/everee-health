@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
-import { fetchCurrentHeartRate, categorizeHeartRate, heartRateSignal, getAuthUrl, isConnected } from '../lib/google-health'
+import { categorizeHeartRate, heartRateSignal } from '../lib/google-health'
+import { getAuthUrl, getConnectionStatus, fetchLatestHr } from '../lib/googleSync'
 import { getHRTags, deleteHRTag } from '../lib/db'
 import { HR_TAG_CATEGORIES } from '../lib/constants'
 import HRTagModal from '../components/HRTagModal'
@@ -39,7 +40,7 @@ export default function Heart({ showToast }) {
   const pollRef = useRef(null)
 
   useEffect(() => {
-    setConnected(isConnected())
+    getConnectionStatus().then(st => setConnected(st.connected)).catch(() => setConnected(false))
     loadTags()
     const interval = setInterval(() => {
       const stored = localStorage.getItem('heart_signal_v3')
@@ -53,11 +54,11 @@ export default function Heart({ showToast }) {
   useEffect(() => {
     if (mode === 'rylie' && connected) {
       pollRef.current = setInterval(async () => {
-        const hr = await fetchCurrentHeartRate()
-        if (hr) {
-          setLiveHR(hr)
-          setSignal(categorizeHeartRate(hr))
-          setHrHistory(h => [{ hr, time: new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) }, ...h].slice(0, 30))
+        const latest = await fetchLatestHr()
+        if (latest?.bpm) {
+          setLiveHR(latest.bpm)
+          setSignal(categorizeHeartRate(latest.bpm))
+          setHrHistory(h => [{ hr: latest.bpm, time: new Date(latest.at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) }, ...h].slice(0, 30))
         }
       }, 30000)
       return () => clearInterval(pollRef.current)

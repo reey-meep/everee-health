@@ -1,9 +1,6 @@
 import { runAllAnalytics } from '../lib/analytics'
 import { useState, useEffect } from 'react'
-import {
-  getAuthUrl, isConnected, clearToken,
-  fetchDaySnapshot, getDebugLog, clearDebugLog,
-} from '../lib/google-health'
+import { getAuthUrl, getConnectionStatus, syncToday, backfill, getSyncLog } from '../lib/googleSync'
 import { pushSupported, permission, getSubscription, enablePush, disablePush, sendTestNotification } from '../lib/push'
 
 const todayKey = () => {
@@ -11,12 +8,16 @@ const todayKey = () => {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
+const btnPrimary = { minHeight: 44, padding: '0 16px', borderRadius: 10, border: 'none', background: 'var(--indigo)', color: '#fff', fontSize: 13.5, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }
+const btnGhost = { minHeight: 44, padding: '0 16px', borderRadius: 10, border: '1.5px solid var(--bd)', background: 'var(--bg)', color: 'var(--ink2)', fontSize: 13.5, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }
+
 export default function More({ showToast, openMetric, openHeart }) {
   const [insights, setInsights] = useState([])
   const [loading, setLoading] = useState(true)
-  const [connected, setConnected] = useState(isConnected())
+  const [conn, setConn] = useState({ connected: false })
   const [syncing, setSyncing] = useState(false)
-  const [snapshot, setSnapshot] = useState(null)
+  const [syncResult, setSyncResult] = useState(null)
+  const [syncRows, setSyncRows] = useState([])
   const [showDebug, setShowDebug] = useState(false)
   const [log, setLog] = useState([])
   const [pushOn, setPushOn] = useState(false)
@@ -25,7 +26,23 @@ export default function More({ showToast, openMetric, openHeart }) {
 
   useEffect(() => {
     getSubscription().then(sub => setPushOn(!!sub)).catch(() => {})
+    refreshStatus()
+    // Google bounces back here with ?google=connected|error after consent.
+    const q = new URLSearchParams(window.location.search)
+    if (q.get('google')) {
+      const ok = q.get('google') === 'connected'
+      showToast(ok ? 'Fitbit connected' : 'Connection failed', ok ? 'var(--green)' : 'var(--red)')
+      if (!ok && q.get('detail')) setSyncResult({ error: q.get('detail') })
+      window.history.replaceState({}, document.title, window.location.pathname)
+    }
+    // eslint-disable-next-line
   }, [])
+
+  async function refreshStatus() {
+    const st = await getConnectionStatus()
+    setConn(st)
+    setSyncRows(await getSyncLog(5))
+  }
 
   async function togglePush() {
     setPushBusy(true); setPushNote('')
@@ -55,27 +72,27 @@ export default function More({ showToast, openMetric, openHeart }) {
   // Runs a real snapshot and shows exactly what came back, so a failure is
   // visible as a status code rather than an empty screen.
   async function syncNow() {
-    setSyncing(true)
-    clearDebugLog()
-    try {
-      const s = await fetchDaySnapshot(todayKey())
-      setSnapshot(s)
-      const got = Object.entries(s).filter(([k, v]) => v != null && k !== 'hr_points').length
-      showToast(got ? `Synced — ${got} metrics` : 'Connected, but no data returned', got ? 'var(--green)' : 'var(--amber)')
-    } catch (e) {
-      showToast('Sync failed', 'var(--red)')
-    }
-    setLog(getDebugLog())
-    setShowDebug(true)
+    setSyncing(true); setSyncResult(null)
+    const r = await syncToday()
+    setSyncResult(r)
+    showToast(
+      r.ok ? (r.metrics_written ? `Synced — ${r.metrics_written} metrics` : 'Connected, but Google returned nothing')
+           : 'Sync failed',
+      r.ok && r.metrics_written ? 'var(--green)' : r.ok ? 'var(--amber)' : 'var(--red)')
+    await refreshStatus()
     setSyncing(false)
   }
 
-  function disconnect() {
-    clearToken()
-    setConnected(false)
-    setSnapshot(null)
-    showToast('Disconnected')
+  async function runBackfill() {
+    setSyncing(true); setSyncResult(null)
+    const r = await backfill(14)
+    setSyncResult(r)
+    const days = r.results ? Object.values(r.results).filter(n => n > 0).length : 0
+    showToast(r.ok ? `Backfilled ${days} days` : 'Backfill failed', r.ok ? 'var(--green)' : 'var(--red)')
+    await refreshStatus()
+    setSyncing(false)
   }
+
 
   return (
     <div className="screen active">
@@ -149,77 +166,56 @@ export default function More({ showToast, openMetric, openHeart }) {
         <div className="section-label" style={{ marginTop: 4 }}>Fitbit</div>
         <div className="card" style={{ padding: 16 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-            <span style={{ width: 8, height: 8, borderRadius: 4, background: connected ? 'var(--green)' : 'var(--ink4)' }} />
-            <div style={{ fontSize: 13.5, fontWeight: 700 }}>{connected ? 'Connected' : 'Not connected'}</div>
+            <span style={{ width: 8, height: 8, borderRadius: 4, background: conn.connected ? 'var(--green)' : 'var(--ink4)' }} />
+            <div style={{ fontSize: 13.5, fontWeight: 700 }}>{conn.connected ? 'Connected' : 'Not connected'}</div>
           </div>
           <div style={{ fontSize: 12, color: 'var(--ink2)', lineHeight: 1.55, marginBottom: 12 }}>
-            {connected
-              ? 'Pull today’s steps, sleep, resting HR, HRV and SpO2 from Google Health.'
-              : 'Link your Google account to pull steps, sleep, resting HR, HRV and SpO2 automatically.'}
+            {conn.connected
+              ? 'Syncing on a schedule in the background — you no longer need to reconnect or open the app for data to save.'
+              : 'Link your Google account once. The connection is kept alive server-side, so it stays connected.'}
           </div>
 
+          {conn.lastRefreshAt && (
+            <div className="mono" style={{ fontSize: 10, color: 'var(--ink3)', marginBottom: 10 }}>
+              token refreshed {new Date(conn.lastRefreshAt).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
+            </div>
+          )}
+          {conn.lastError && (
+            <div className="mono" style={{ fontSize: 10, color: 'var(--red)', marginBottom: 10 }}>{conn.lastError}</div>
+          )}
+
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            {!connected && (
-              <button
-                onClick={() => { window.location.href = getAuthUrl() }}
-                style={{ minHeight: 44, padding: '0 16px', borderRadius: 10, border: 'none', background: 'var(--indigo)', color: '#fff', fontSize: 13.5, fontWeight: 600, cursor: 'pointer' }}>
-                Connect Fitbit
-              </button>
+            {!conn.connected && (
+              <button onClick={() => { window.location.href = getAuthUrl() }} style={btnPrimary}>Connect Fitbit</button>
             )}
-            {connected && (
+            {conn.connected && (
               <>
-                <button
-                  onClick={syncNow} disabled={syncing}
-                  style={{ minHeight: 44, padding: '0 16px', borderRadius: 10, border: 'none', background: 'var(--indigo)', color: '#fff', fontSize: 13.5, fontWeight: 600, cursor: 'pointer', opacity: syncing ? .6 : 1 }}>
+                <button onClick={syncNow} disabled={syncing} style={{ ...btnPrimary, opacity: syncing ? .6 : 1 }}>
                   {syncing ? 'Syncing…' : 'Sync now'}
                 </button>
-                <button
-                  onClick={disconnect}
-                  style={{ minHeight: 44, padding: '0 16px', borderRadius: 10, border: '1.5px solid var(--bd)', background: 'var(--bg)', color: 'var(--ink2)', fontSize: 13.5, fontWeight: 600, cursor: 'pointer' }}>
-                  Disconnect
-                </button>
+                <button onClick={runBackfill} disabled={syncing} style={btnGhost}>Backfill 14 days</button>
               </>
             )}
           </div>
 
-          {snapshot && (
-            <div style={{ marginTop: 14, borderTop: '1px solid var(--bd)', paddingTop: 12 }}>
-              <div className="eyebrow" style={{ marginBottom: 8 }}>Today&rsquo;s values</div>
-              {Object.entries(snapshot)
-                .filter(([k]) => k !== 'hr_points' && k !== 'sleep_stages')
-                .map(([k, v]) => (
-                  <div key={k} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, padding: '3px 0' }}>
-                    <span style={{ color: 'var(--ink3)' }}>{k}</span>
-                    <span className="mono" style={{ color: v == null ? 'var(--ink4)' : 'var(--ink)' }}>{v == null ? '—' : String(v)}</span>
-                  </div>
-                ))}
+          {syncResult?.error && (
+            <div className="mono" style={{ fontSize: 10, color: 'var(--red)', marginTop: 10, wordBreak: 'break-word' }}>{syncResult.error}</div>
+          )}
+
+          {syncRows.length > 0 && (
+            <div style={{ marginTop: 14, borderTop: '1px solid var(--bd)', paddingTop: 10 }}>
+              <div className="eyebrow" style={{ marginBottom: 6 }}>Recent syncs</div>
+              {syncRows.map(r => (
+                <div key={r.id} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, padding: '2px 0' }}>
+                  <span className="mono" style={{ color: 'var(--ink3)' }}>{r.target_date}</span>
+                  <span className="mono" style={{ color: r.ok ? 'var(--green)' : 'var(--red)' }}>
+                    {r.ok ? `${r.metrics_written} metrics` : (r.detail || 'failed').slice(0, 34)}
+                  </span>
+                </div>
+              ))}
             </div>
           )}
         </div>
-
-        {/* ── DEBUG ────────────────────────────────────────── */}
-        {log.length > 0 && (
-          <>
-            <div className="section-label" style={{ marginTop: 4 }}>
-              API debug
-              <a onClick={() => setShowDebug(v => !v)} style={{ cursor: 'pointer' }}>{showDebug ? 'Hide' : 'Show'}</a>
-            </div>
-            {showDebug && (
-              <div className="card" style={{ padding: 12 }}>
-                {log.map((e, i) => (
-                  <div key={i} style={{ borderBottom: i < log.length - 1 ? '1px solid var(--bd)' : 'none', padding: '6px 0' }}>
-                    <div className="mono" style={{ fontSize: 9.5, color: e.ok ? 'var(--green)' : 'var(--red)', fontWeight: 600 }}>
-                      {e.method} {e.status || 'ERR'} {e.ok ? 'OK' : 'FAIL'}
-                    </div>
-                    <div className="mono" style={{ fontSize: 9, color: 'var(--ink3)', wordBreak: 'break-all', marginTop: 2 }}>{e.path}</div>
-                    {e.error && <div className="mono" style={{ fontSize: 9, color: 'var(--red)', marginTop: 3, wordBreak: 'break-word' }}>{e.error}</div>}
-                    {e.sample && <div className="mono" style={{ fontSize: 8.5, color: 'var(--ink2)', marginTop: 3, wordBreak: 'break-all' }}>{e.sample}</div>}
-                  </div>
-                ))}
-              </div>
-            )}
-          </>
-        )}
 
         {/* ── NOT YET BUILT ────────────────────────────────── */}
         {/* Heart monitor is reachable now -- it holds the episode walkthrough. */}

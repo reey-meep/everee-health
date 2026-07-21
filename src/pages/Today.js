@@ -1,7 +1,9 @@
 import { useState, useEffect, useRef } from 'react'
-import { getDailyLog, upsertDailyLog, getPracticeLogs, togglePractice, getEpisodes, getScheduleSettings } from '../lib/db'
+import { getDailyLog, upsertDailyLog, getPracticeLogs, togglePractice, getEpisodes, getScheduleSettings, getFoodEntries, addWater } from '../lib/db'
 import { getCurrentPhase, getDayNumber, CYCLE_PHASES, ALL_TASKS, SYMPTOMS, TASK_GROUPS, shiftSchedule } from '../lib/constants'
 import ScheduleWidget from '../components/ScheduleWidget'
+import PetPanel from '../components/PetPanel'
+import { REQUIRED_PRACTICE_IDS } from '../lib/pet'
 import { fetchDaySnapshot, fetchCurrentWeather, isConnected } from '../lib/google-health'
 
 // Local calendar date, not UTC. Recomputed per call so a PWA left open
@@ -63,6 +65,7 @@ export default function Today({ showToast, openMetric, openEpisode, openSchedule
   const [openGroup, setOpenGroup] = useState('medications')
   const [showAllSymptoms, setShowAllSymptoms] = useState(false)
   const [settings, setSettings] = useState(null)
+  const [foods, setFoods] = useState([])
 
   const phase = getCurrentPhase()
   const day = getDayNumber()
@@ -70,7 +73,10 @@ export default function Today({ showToast, openMetric, openEpisode, openSchedule
   useEffect(() => { load() }, [])
 
   async function load() {
-    const [l, p, eps] = await Promise.all([getDailyLog(todayKey()), getPracticeLogs(todayKey()), getEpisodes(3)])
+    const [l, p, eps, fe] = await Promise.all([
+      getDailyLog(todayKey()), getPracticeLogs(todayKey()), getEpisodes(3), getFoodEntries(todayKey()),
+    ])
+    setFoods(fe)
     if (l) setLog(l)
     const m = {}; p.forEach(x => { m[x.practice_id] = x.completed }); setPractices(m)
     setEpisodes(eps)
@@ -141,6 +147,24 @@ export default function Today({ showToast, openMetric, openEpisode, openSchedule
   const highRisk = ['luteal_late', 'pms'].includes(log.cycle_phase)
   const stepPct = fitbit?.steps ? Math.min(fitbit.steps / 7500, 1) : 0
   const displaySymptoms = showAllSymptoms ? SYMPTOMS : SYMPTOMS.slice(0, 3)
+  // Pet inputs are derived, never manually entered: calories from the food
+  // diary, water from daily_logs, steps from Google Health, practices from
+  // practice_logs. Required items are the 10 that actually exist in TASK_GROUPS.
+  const reqDone = REQUIRED_PRACTICE_IDS.filter(id => practices[id]).length
+  const bonusDone = ALL_TASKS.filter(t => practices[t.id] && !REQUIRED_PRACTICE_IDS.includes(t.id)).length
+  const petActual = {
+    cal: foods.reduce((sum, f) => sum + (f.calories || 0), 0),
+    water: Number(log.water_oz || 0),
+    steps: fitbit?.steps || 0,
+    reqDone,
+    bonusDone,
+  }
+
+  async function handleAddWater(oz) {
+    const updated = await addWater(todayKey(), oz)
+    if (updated) setLog(l => ({ ...l, water_oz: updated.water_oz }))
+  }
+
   const schedule = shiftSchedule(settings?.wake_time || '07:30')
   const completions = log.schedule_completions || {}
   // Totals come from the persisted columns the schedule increments -- not from
@@ -150,6 +174,14 @@ export default function Today({ showToast, openMetric, openEpisode, openSchedule
 
   return (
     <div className="screen active">
+      <div style={{ padding: '12px 14px 0' }}>
+        <PetPanel
+          actual={petActual}
+          practices={practices}
+          onAddWater={handleAddWater}
+          showToast={showToast}
+        />
+      </div>
       {/* HEADER */}
       <div className="header">
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', paddingBottom: 14 }}>

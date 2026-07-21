@@ -167,10 +167,8 @@ export default function Today({ showToast, openMetric, openEpisode, openSchedule
 
   const schedule = shiftSchedule(settings?.wake_time || '07:30')
   const completions = log.schedule_completions || {}
-  // Totals come from the persisted columns the schedule increments -- not from
-  // food_entries, which is tracked separately. Summing both would double-count
-  // any meal logged in the diary AND ticked off here.
-  const scheduleTotals = { calories: log.calories_logged || 0, water: Number(log.water_oz || 0) }
+  // Same numbers the pet uses -- one calorie figure across the whole screen.
+  const scheduleTotals = { calories: petActual.cal, water: petActual.water }
 
   return (
     <div className="screen active">

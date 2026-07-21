@@ -293,11 +293,11 @@ export async function completePrompt(date, prompt, status = 'done') {
   completions[prompt.id] = { status, at: new Date().toISOString() }
 
   const updates = { schedule_completions: completions }
-  // Only add the payload the first time it's marked done, so re-tapping or
-  // toggling done -> skipped -> done doesn't double-count.
-  if (status === 'done' && !already) {
-    if (prompt.calories) updates.calories_logged = (current?.calories_logged || 0) + prompt.calories
-    if (prompt.water) updates.water_oz = Number(current?.water_oz || 0) + prompt.water
+  // Water has no diary equivalent, so the schedule is its source. Calories are
+  // NOT added here -- food_entries is the single source of truth, and adding an
+  // estimate too would double-count any meal logged in both places.
+  if (status === 'done' && !already && prompt.water) {
+    updates.water_oz = Number(current?.water_oz || 0) + prompt.water
   }
   return upsertDailyLog(date, updates)
 }

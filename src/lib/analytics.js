@@ -18,11 +18,31 @@ const MIN_POINTS = 5 // minimum data points to surface a correlation card
 export async function buildDataset(days = 60) {
   const since = new Date()
   since.setDate(since.getDate() - days)
-  const sinceStr = since.toISOString().split('T')[0]
+  // Local calendar date -- toISOString() is UTC and rolls over early evening,
+  // shifting the whole window by a day.
+  const sinceStr = `${since.getFullYear()}-${String(since.getMonth() + 1).padStart(2, '0')}-${String(since.getDate()).padStart(2, '0')}`
+
+  // practice_logs runs ~55 rows/day, so 60 days exceeds a single PostgREST page.
+  // Silent truncation would drop the oldest weeks from every correlation.
+  async function fetchAllPractices() {
+    const PAGE = 1000
+    let all = [], from = 0
+    for (;;) {
+      const { data, error } = await supabase
+        .from('practice_logs').select('*')
+        .eq('user_id', USER_ID).gte('date', sinceStr)
+        .order('date').range(from, from + PAGE - 1)
+      if (error) { console.error(error); break }
+      all = all.concat(data || [])
+      if (!data || data.length < PAGE) break
+      from += PAGE
+    }
+    return { data: all }
+  }
 
   const [logsRes, practicesRes, episodesRes, foodRes] = await Promise.all([
     supabase.from('daily_logs').select('*').eq('user_id', USER_ID).gte('date', sinceStr).order('date'),
-    supabase.from('practice_logs').select('*').eq('user_id', USER_ID).gte('date', sinceStr),
+    fetchAllPractices(),
     supabase.from('episodes').select('*').eq('user_id', USER_ID).gte('started_at', since.toISOString()),
     supabase.from('food_entries').select('*').eq('user_id', USER_ID).gte('date', sinceStr),
   ])
@@ -56,37 +76,43 @@ export async function buildDataset(days = 60) {
   const dataset = logs.map(log => {
     const date = log.date
     const p = practicesByDate[date] || {}
+    // No practice rows at all = the app was never opened that day. Emit null so
+    // the correlation guards drop the day, rather than false which would score
+    // it as a deliberate skip.
+    const logged = Object.keys(p).length > 0
+    const pv = k => (logged ? !!p[k] : null)
+    const pcount = keys => (logged ? keys.filter(k => p[k]).length : null)
     const eps = episodesByDate[date] || []
     const dayFood = foodByDate[date] || []
 
     // Medication adherence
     const meds = {
-      loratadine: p.loratadine || false,
-      famotidine_am: p.famo_am || false,
-      famotidine_pm: p.famo_pm || false,
-      propranolol_all3: (p.prop1 && p.prop2 && p.prop3) || false,
-      propranolol_dose3: p.prop3 || false,
-      quercetin_both: (p.quercetin_am && p.quercetin_pm) || false,
-      antihistamine_complete: (p.loratadine && p.famo_am && p.famo_pm) || false,
+      loratadine: pv('loratadine'),
+      famotidine_am: pv('famo_am'),
+      famotidine_pm: pv('famo_pm'),
+      propranolol_all3: logged ? !!(p.prop1 && p.prop2 && p.prop3) : null,
+      propranolol_dose3: pv('prop3'),
+      quercetin_both: logged ? !!(p.quercetin_am && p.quercetin_pm) : null,
+      antihistamine_complete: logged ? !!(p.loratadine && p.famo_am && p.famo_pm) : null,
     }
 
     // Vestibular sessions
-    const vestSessions = [p.vest1, p.vest2, p.vest3, p.vest4, p.vest5].filter(Boolean).length
+    const vestSessions = pcount(['vest1', 'vest2', 'vest3', 'vest4', 'vest5'])
 
     // Vagal practices
-    const vagalCount = [p.breath_am, p.gargle, p.hum, p.breath_pm, p.cold_face, p.red_light].filter(Boolean).length
+    const vagalCount = pcount(['breath_am', 'gargle', 'hum', 'breath_pm', 'cold_face', 'red_light'])
 
     // Movement
     const movement = {
-      walk: p.walk || false,
-      stretch: p.stretch || false,
-      weights: p.weights || false,
-      taichi: p.taichi || false,
+      walk: pv('walk'),
+      stretch: pv('stretch'),
+      weights: pv('weights'),
+      taichi: pv('taichi'),
       walk_minutes: log.walk_minutes || 0,
     }
 
     // Sleep hygiene
-    const sleepHygiene = [p.screens_off, p.mouth_tape, p.window, p.bed_time].filter(Boolean).length
+    const sleepHygiene = pcount(['screens_off', 'mouth_tape', 'window', 'bed_time'])
 
     // Food
     const totalCals = dayFood.reduce((s, f) => s + (f.calories || 0), 0)
@@ -183,15 +209,32 @@ export async function buildDataset(days = 60) {
 // For numeric inputs: split into low/high groups and compare
 // Returns a correlation card if difference is meaningful and sample size is adequate
 
+// Lag must be measured in CALENDAR days, not array positions. dataset only
+// contains days that have a daily_logs row, so dataset[i - 1] is "the previous
+// logged day" -- if a day is skipped, a 1-day lag silently becomes 2 or more.
+function shiftDate(dateStr, deltaDays) {
+  const [y, m, d] = dateStr.split('-').map(Number)
+  const dt = new Date(y, m - 1, d + deltaDays)
+  return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`
+}
+
+function pairByDate(dataset, lagDays) {
+  const byDate = new Map(dataset.map(d => [d.date, d]))
+  const out = []
+  dataset.forEach(output => {
+    const input = lagDays === 0 ? output : byDate.get(shiftDate(output.date, -lagDays))
+    if (input) out.push({ input, output })
+  })
+  return out
+}
+
 function binaryCorrelation(dataset, inputKey, outputKey, lagDays = 0) {
   const pairs = []
-  for (let i = lagDays; i < dataset.length; i++) {
-    const input = dataset[i - lagDays]
-    const output = dataset[i]
-    if (input[inputKey] === null || input[inputKey] === undefined) continue
-    if (output[outputKey] === null || output[outputKey] === undefined) continue
+  pairByDate(dataset, lagDays).forEach(({ input, output }) => {
+    if (input[inputKey] === null || input[inputKey] === undefined) return
+    if (output[outputKey] === null || output[outputKey] === undefined) return
     pairs.push({ input: input[inputKey] ? 1 : 0, output: output[outputKey] })
-  }
+  })
 
   const group1 = pairs.filter(p => p.input === 1).map(p => p.output) // practice done / true
   const group0 = pairs.filter(p => p.input === 0).map(p => p.output) // practice missed / false
@@ -221,13 +264,11 @@ function binaryCorrelation(dataset, inputKey, outputKey, lagDays = 0) {
 
 function numericCorrelation(dataset, inputKey, outputKey, threshold, lagDays = 0) {
   const pairs = []
-  for (let i = lagDays; i < dataset.length; i++) {
-    const input = dataset[i - lagDays]
-    const output = dataset[i]
-    if (input[inputKey] === null || input[inputKey] === undefined) continue
-    if (output[outputKey] === null || output[outputKey] === undefined) continue
+  pairByDate(dataset, lagDays).forEach(({ input, output }) => {
+    if (input[inputKey] === null || input[inputKey] === undefined) return
+    if (output[outputKey] === null || output[outputKey] === undefined) return
     pairs.push({ input: input[inputKey], output: output[outputKey] })
-  }
+  })
 
   const high = pairs.filter(p => p.input >= threshold).map(p => p.output)
   const low = pairs.filter(p => p.input < threshold).map(p => p.output)
@@ -362,7 +403,10 @@ function buildInsightCard(correlation, type) {
     const inputLabel = INPUT_LABELS[inputKey] || inputKey
     const outputLabel = SYMPTOM_LABELS[outputKey] || outputKey
     const lagNote = lagDays > 0 ? ` (effect measured ${lagDays} day${lagDays > 1 ? 's' : ''} later)` : ''
-    const better = direction === 'better_when_done' && outputKey !== 'episode_count' && outputKey !== 'max_severity'
+    // Every output in SYMPTOM_LABELS is lower-is-better, including episode_count
+    // and max_severity. Excluding those two forced better=false, so a practice
+    // that REDUCED episodes was rendered red as '↑ Raises'.
+    const better = direction === 'better_when_done'
     const color = better ? 'var(--green)' : 'var(--red)'
     const impact = Math.abs(difference).toFixed(1)
 
@@ -543,7 +587,7 @@ export async function runAllAnalytics() {
   // Episode patterns
   const episodeDays = dataset.filter(d => d.had_episode)
   const episodePatterns = {
-    total_episodes: episodes => episodes,
+    total_episodes: dataset.reduce((sum, d) => sum + (d.episode_count || 0), 0),
     most_common_type: (() => {
       const typeCounts = {}
       dataset.flatMap(d => d.episode_types).forEach(t => { typeCounts[t] = (typeCounts[t] || 0) + 1 })

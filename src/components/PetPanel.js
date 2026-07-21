@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import RabbitSVG from './RabbitSVG'
+import RabbitPixel from './RabbitPixel'
 import { getAdaptiveScore, moodFromScore, MOOD_MESSAGES, getBars } from '../lib/pet'
 import { TASK_GROUPS } from '../lib/constants'
 
@@ -43,7 +43,7 @@ export default function PetPanel({ actual, practices, onAddWater, showToast }) {
 
   return (
     <div className="card" style={{ padding: '16px 16px 14px', marginBottom: 10 }}>
-      <RabbitSVG mood={mood} size={176} />
+      <RabbitPixel mood={mood} size={168} />
 
       <div style={{ textAlign: 'center', marginTop: 2, marginBottom: 14 }}>
         <div style={{ fontSize: 14.5, fontWeight: 700 }}>{MOOD_MESSAGES[mood]}</div>

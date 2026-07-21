@@ -174,14 +174,6 @@ export default function Today({ showToast, openMetric, openEpisode, openSchedule
 
   return (
     <div className="screen active">
-      <div style={{ padding: '12px 14px 0' }}>
-        <PetPanel
-          actual={petActual}
-          practices={practices}
-          onAddWater={handleAddWater}
-          showToast={showToast}
-        />
-      </div>
       {/* HEADER */}
       <div className="header">
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', paddingBottom: 14 }}>
@@ -444,6 +436,14 @@ export default function Today({ showToast, openMetric, openEpisode, openSchedule
             </div>
           </div>
         </div>
+
+        {/* Tamagotchi -- sits below Cycle */}
+        <PetPanel
+          actual={petActual}
+          practices={practices}
+          onAddWater={handleAddWater}
+          showToast={showToast}
+        />
 
         {/* Recent episodes */}
         {episodes.length > 0 && (

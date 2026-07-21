@@ -1,8 +1,9 @@
 import { SCHEDULE_TARGETS, SCHEDULE_KINDS, nextPrompt, minutesUntil } from '../lib/constants'
 
-function Bar({ label, value, target, color, ceiling }) {
+function Bar({ label, value, target, color, ceilingAt }) {
   const pct = target ? Math.min(value / target, 1) : 0
-  const over = ceiling && value > target
+  // Only flags amber past the pacing ceiling -- exceeding the minimum is good.
+  const over = ceilingAt && value > ceilingAt
   return (
     <div style={{ marginBottom: 9 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 3 }}>
@@ -76,9 +77,9 @@ export default function ScheduleWidget({ schedule, statuses, trackable, totals, 
         </div>
       </div>
 
-      <Bar label="Calories" value={totals.calories} target={SCHEDULE_TARGETS.calories.goal} color="var(--amber)" />
-      <Bar label="Water (oz)" value={totals.water} target={SCHEDULE_TARGETS.water.goal} color="var(--sky)" />
-      <Bar label="Steps" value={steps || 0} target={SCHEDULE_TARGETS.steps.goal} color="var(--green)" ceiling />
+      <Bar label="Calories" value={totals.calories} target={SCHEDULE_TARGETS.calories.min} color="var(--amber)" />
+      <Bar label="Water (oz)" value={totals.water} target={SCHEDULE_TARGETS.water.min} color="var(--sky)" />
+      <Bar label="Steps" value={steps || 0} target={SCHEDULE_TARGETS.steps.min} ceilingAt={SCHEDULE_TARGETS.steps.ceiling} color="var(--green)" />
     </div>
   )
 }

@@ -9,8 +9,9 @@ const todayKey = () => {
   const d = new Date()
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
-const MIN = 1500, GOAL = 1800
-const WATER_MIN = 85, WATER_GOAL = 100
+// Minimums are the bar to clear; stretch values are upside only.
+const MIN = 1500, STRETCH = 1800
+const WATER_MIN = 85, WATER_STRETCH = 100
 const MEAL_TYPES = ['Breakfast', 'Morning snack', 'Lunch', 'Afternoon snack', 'Dinner', 'Evening snack', 'Drink']
 const TRIGGER_CATS = [{ id: 'histamine', label: 'Histamine', color: '#FF3B5C' }, { id: 'mast_cell', label: 'Mast cell', color: '#F0468A' }, { id: 'oas', label: 'OAS cluster', color: '#FF9500' }, { id: 'intolerance', label: 'Intolerance', color: '#5B5EF4' }, { id: 'lpr', label: 'LPR', color: '#00B4D8' }, { id: 'other', label: 'Other', color: '#A0A6B8' }]
 
@@ -85,8 +86,8 @@ export default function Body({ showToast }) {
 
   const total = entries.reduce((s, e) => s + (e.calories || 0), 0)
   const protein = entries.reduce((s, e) => s + (e.protein_grams || 0), 0)
-  const pct = Math.min(total / GOAL, 1)
-  const calColor = total >= GOAL ? 'var(--green)' : total >= MIN ? 'var(--amber)' : 'var(--red)'
+  const pct = Math.min(total / MIN, 1)
+  const calColor = total >= MIN ? 'var(--green)' : total >= MIN * 0.6 ? 'var(--amber)' : 'var(--red)'
 
   return (
     <div className="screen active">
@@ -101,18 +102,18 @@ export default function Body({ showToast }) {
         </div>
         <div className="prog" style={{ margin: '0 0 5px' }}><div className="prog-fill" style={{ width: `${pct * 100}%`, background: calColor }} /></div>
         <div style={{ display: 'flex', justifyContent: 'space-between', fontFamily: 'var(--mono)', fontSize: 9, color: 'var(--ink3)', marginBottom: 14 }}>
-          <span>0</span><span style={{ color: 'var(--amber)' }}>{MIN} min</span><span style={{ color: 'var(--green)' }}>{GOAL} goal</span>
+          <span>0</span><span style={{ color: 'var(--green)' }}>{MIN} min</span><span style={{ color: 'var(--ink4)' }}>{STRETCH} stretch</span>
         </div>
         {protein > 0 && <div className="mono" style={{ fontSize: 10, color: 'var(--ink3)', marginBottom: 10 }}>{protein.toFixed(0)}g protein today</div>}
         <div className="card" style={{ padding: 14, marginBottom: 12 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 6 }}>
             <span className="eyebrow">Water</span>
             <span className="mono" style={{ fontSize: 11, color: waterOz >= WATER_MIN ? 'var(--green)' : 'var(--sky)' }}>
-              {Math.round(waterOz)}<span style={{ color: 'var(--ink4)' }}> / {WATER_GOAL} oz</span>
+              {Math.round(waterOz)}<span style={{ color: 'var(--ink4)' }}> / {WATER_MIN} oz</span>
             </span>
           </div>
           <div className="prog" style={{ marginBottom: 10 }}>
-            <div className="prog-fill" style={{ width: `${Math.min(waterOz / WATER_GOAL, 1) * 100}%`, background: waterOz >= WATER_MIN ? 'var(--green)' : 'var(--sky)' }} />
+            <div className="prog-fill" style={{ width: `${Math.min(waterOz / WATER_MIN, 1) * 100}%`, background: waterOz >= WATER_MIN ? 'var(--green)' : 'var(--sky)' }} />
           </div>
           <div style={{ display: 'flex', gap: 8 }}>
             {[8, 12, 16].map(oz => (

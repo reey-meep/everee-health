@@ -1,20 +1,16 @@
 import { useState } from 'react'
 import RabbitPixel from './RabbitPixel'
-import { getAdaptiveScore, stateFromScore, PET_STATES, getBars, MIND_GROUPS, JOY_GROUPS } from '../lib/pet'
+import { getAdaptiveScore, stateFromScore, PET_STATES, getBars, BODY_GROUPS, MIND_GROUPS } from '../lib/pet'
 import { TASK_GROUPS } from '../lib/constants'
 
 const BARS = [
   {
     key: 'body', label: 'Body', color: 'var(--amber)',
-    what: 'Calories, water and steps, against where they should be by this hour.',
+    what: 'Food, water and steps against where they should be by this hour, plus vestibular drills and medications.',
   },
   {
     key: 'mind', label: 'Mind', color: 'var(--indigo)',
-    what: 'The clinical protocol — medications, vestibular drills, vagal practices.',
-  },
-  {
-    key: 'joy', label: 'Joy', color: 'var(--pink)',
-    what: 'Mental and emotional wellness — the practices that are for you, not your illness.',
+    what: 'Everything else — movement, gut care, vagal practices, sleep routine and wellness.',
   },
 ]
 
@@ -37,9 +33,11 @@ export default function PetPanel({ actual, practices }) {
   const bars = getBars(actual, TASK_GROUPS, practices)
 
   const detail = {
-    body: `${Math.round(actual.cal || 0)}/${Math.round(target.cal)} cal · ${Math.round(actual.water || 0)}/${Math.round(target.water)} oz · ${Math.round(actual.steps || 0)}/${Math.round(target.steps)} steps`,
+    body: (() => {
+      const c = groupCounts(BODY_GROUPS, practices)
+      return `${Math.round(actual.cal || 0)}/${Math.round(target.cal)} cal · ${Math.round(actual.water || 0)}/${Math.round(target.water)} oz · ${Math.round(actual.steps || 0)}/${Math.round(target.steps)} steps · ${c.done}/${c.total} practices`
+    })(),
     mind: (() => { const c = groupCounts(MIND_GROUPS, practices); return `${c.done} of ${c.total} practices done` })(),
-    joy: (() => { const c = groupCounts(JOY_GROUPS, practices); return `${c.done} of ${c.total} practices done` })(),
   }
 
   return (

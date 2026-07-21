@@ -25,8 +25,8 @@ export default function ScheduleDetail({ schedule, statuses, totals, onBack }) {
       <div style={{ padding: '4px 16px 12px' }}>
         <div className="page-title" style={{ marginBottom: 6 }}>Today&rsquo;s schedule</div>
         <div className="mono" style={{ fontSize: 10.5, color: 'var(--ink3)' }}>
-          {Math.round(totals.calories)} / {SCHEDULE_TARGETS.calories.goal} cal ·{' '}
-          {Math.round(totals.water)} / {SCHEDULE_TARGETS.water.goal} oz
+          {Math.round(totals.calories)} / {SCHEDULE_TARGETS.calories.min} cal ·{' '}
+          {Math.round(totals.water)} / {SCHEDULE_TARGETS.water.min} oz
         </div>
         <div className="mono" style={{ fontSize: 9.5, color: 'var(--ink4)', marginTop: 4, lineHeight: 1.5 }}>
           Reflects what you&rsquo;ve logged elsewhere — nothing to tick off here.

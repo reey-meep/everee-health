@@ -186,11 +186,13 @@ export const HR_TAG_CATEGORIES = [
 // ── DAILY SCHEDULE (tamagotchi prompts) ─────────────────────
 // Times are relative to a 07:30 wake anchor. Changing wake time in settings
 // shifts every prompt by the same offset via shiftSchedule().
+// Success = reaching the MINIMUM. `stretch` is upside, not the bar to clear.
+// Steps are capped: 5000 is the minimum, 7500 the pacing ceiling to stay under.
 export const SCHEDULE_TARGETS = {
-  calories: { floor: 1500, goal: 1800, unit: 'cal' },
-  water:    { floor: 85,   goal: 100,  unit: 'oz' },
-  steps:    { floor: 5000, goal: 7500, unit: '', ceiling: true }, // ceiling, not a target -- dysautonomia pacing
-  sleep:    { floor: 7,    goal: 8,    unit: 'h' },
+  calories: { min: 1500, stretch: 1800, unit: 'cal' },
+  water:    { min: 85,   stretch: 100,  unit: 'oz' },
+  steps:    { min: 5000, ceiling: 7500, unit: '' },
+  sleep:    { min: 7,    stretch: 8,    unit: 'h' },
 }
 
 // kind drives the colour bar and the tap action.

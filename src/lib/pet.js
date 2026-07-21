@@ -4,23 +4,28 @@
 // totals -- so at 10am, 450 cal is "on track", not "behind".
 
 // [hour, calories, waterOz, steps, requiredItemsDone]
+//
+// The curve ramps to the DAILY MINIMUMS -- 1500 cal, 85 oz, 5000 steps -- not
+// the stretch goals. Hitting the minimum is success; anything beyond is upside.
+// It previously ramped to 1800/100/7500, so a day that met every minimum still
+// scored ~0.8 and left her at "poor".
 const TARGET_CURVE = [
   [7.5,     0,   0,    0,  0],
-  [8,     150,  12,    0,  3],
-  [9,     300,  24,  500,  3],
-  [10,    450,  40, 1000,  4],
-  [11,    600,  52, 2000,  5],
-  [12,    750,  60, 2500,  6],
-  [13,    900,  68, 3000,  6],
-  [14,   1050,  76, 3500,  7],
-  [15,   1100,  82, 4000,  7],
-  [16,   1150,  88, 4500,  8],
-  [17,   1200,  92, 5000,  9],
-  [18,   1350,  96, 5500, 10],
-  [19,   1500, 100, 6000, 11],
-  [20,   1600, 100, 6500, 12],
-  [21,   1800, 100, 7000, 13],
-  [22,   1800, 100, 7500, 13],
+  [8,     125,  10,    0,  3],
+  [9,     250,  20,  350,  3],
+  [10,    375,  34,  650,  4],
+  [11,    500,  44, 1350,  5],
+  [12,    625,  51, 1650,  6],
+  [13,    750,  58, 2000,  6],
+  [14,    875,  65, 2350,  7],
+  [15,    900,  70, 2650,  7],
+  [16,    950,  75, 3000,  8],
+  [17,   1000,  78, 3350,  9],
+  [18,   1125,  82, 3650, 10],
+  [19,   1250,  85, 4000, 11],
+  [20,   1350,  85, 4350, 12],
+  [21,   1500,  85, 4650, 13],
+  [22,   1500,  85, 5000, 13],
 ]
 
 // The curve assumes 13 required practices. All 13 now exist in TASK_GROUPS
@@ -84,7 +89,7 @@ export function getAdaptiveScore(actual, now = new Date()) {
   const h = now.getHours() + now.getMinutes() / 60
   // After 10pm judge against daily minimums rather than the curve.
   const target = h >= 22
-    ? { cal: 1500, water: 85, steps: 5000, reqDone: REQUIRED_PRACTICE_IDS.length }
+    ? { cal: 1500, water: 85, steps: 5000, reqDone: REQUIRED_PRACTICE_IDS.length }  // daily minimums
     : interpolateTargets(now)
 
   const ratio = (a, t) => Math.min((a || 0) / Math.max(t, 1), 1.5)
@@ -118,27 +123,30 @@ export function stateFromScore(score) {
   return 3                    // flourishing
 }
 
-// Body / mind / joy groupings. The spec named these bars but did not define
-// which practices feed them; this is an interpretation, not a spec quote.
-//   body = intake and movement (calories, water, steps)
-//   mind = clinical protocol adherence (meds, vestibular, vagal)
-//   joy  = the wellness group -- the things that are for her, not her illness
-export const MIND_GROUPS = ['medications', 'vestibular', 'vagal']
-export const JOY_GROUPS = ['wellness']
+// Two bars, and every practice group belongs to exactly one of them.
+// Previously movement, food and sleep were in NO bar, so ~40% of the practice
+// list was invisible to the display.
+//
+//   body = the physical work: intake, movement, and the clinical routine
+//          (food, water, steps, vestibular drills, medications)
+//   mind = everything else
+export const BODY_GROUPS = ['medications', 'vestibular']
+export const MIND_GROUPS = ['movement', 'food', 'vagal', 'sleep', 'wellness']
+
+function groupRatio(groupIds, taskGroups, practices) {
+  const tasks = taskGroups.filter(g => groupIds.includes(g.id)).flatMap(g => g.tasks)
+  if (!tasks.length) return 0
+  return tasks.filter(t => practices[t.id]).length / tasks.length
+}
 
 export function getBars(actual, taskGroups, practices, now = new Date()) {
   const { parts } = getAdaptiveScore(actual, now)
-  const body = (parts.calScore + parts.waterScore + parts.stepsScore) / 3
-
-  const ratioFor = groupIds => {
-    const tasks = taskGroups.filter(g => groupIds.includes(g.id)).flatMap(g => g.tasks)
-    if (!tasks.length) return 0
-    const done = tasks.filter(t => practices[t.id]).length
-    return done / tasks.length
-  }
+  // Body blends the three intake/movement measures with the clinical practices,
+  // so food, water and steps carry the same weight as the routine itself.
+  const intake = (parts.calScore + parts.waterScore + parts.stepsScore) / 3
+  const bodyPractices = groupRatio(BODY_GROUPS, taskGroups, practices)
   return {
-    body: Math.min(body, 1),
-    mind: ratioFor(MIND_GROUPS),
-    joy: ratioFor(JOY_GROUPS),
+    body: Math.min((intake + bodyPractices) / 2, 1),
+    mind: groupRatio(MIND_GROUPS, taskGroups, practices),
   }
 }

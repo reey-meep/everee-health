@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { getDailyLog, upsertDailyLog, getPracticeLogs, togglePractice, getEpisodes, getScheduleSettings, getFoodEntries, saveDaySnapshot } from '../lib/db'
-import { getCurrentPhase, getDayNumber, CYCLE_PHASES, ALL_TASKS, SYMPTOMS, TASK_GROUPS, shiftSchedule, deriveScheduleStatus, TRACKABLE_PROMPTS } from '../lib/constants'
+import { getCurrentPhase, getDayNumber, CYCLE_PHASES, ALL_TASKS, SYMPTOMS, TASK_GROUPS, shiftSchedule, deriveScheduleStatus, TRACKABLE_PROMPTS, SCHEDULE_TARGETS, wakeTimeFor } from '../lib/constants'
 import ScheduleWidget from '../components/ScheduleWidget'
 import PetPanel from '../components/PetPanel'
 import { REQUIRED_PRACTICE_IDS } from '../lib/pet'
@@ -150,7 +150,8 @@ export default function Today({ showToast, openMetric, openEpisode, openSchedule
   const pct = done / total
   const C = 2 * Math.PI * 28
   const highRisk = ['luteal_late', 'pms'].includes(log.cycle_phase)
-  const stepPct = fitbit?.steps ? Math.min(fitbit.steps / 7500, 1) : 0
+  const stepPct = fitbit?.steps ? Math.min(fitbit.steps / SCHEDULE_TARGETS.steps.min, 1) : 0
+  const stepsOverCeiling = (fitbit?.steps || 0) > SCHEDULE_TARGETS.steps.ceiling
   // All five or none -- the ring and bars above stay visible either way.
   const displaySymptoms = showScorers ? SYMPTOMS : []
   // Pet inputs are derived, never manually entered: calories from the food
@@ -166,7 +167,7 @@ export default function Today({ showToast, openMetric, openEpisode, openSchedule
     bonusDone,
   }
 
-  const schedule = shiftSchedule(settings?.wake_time || '07:30')
+  const schedule = shiftSchedule(settings?.wake_time_override || wakeTimeFor())
   // Status is derived from what she actually logged, not from ticks on the
   // schedule itself -- the schedule is a read-only view of the day.
   const scheduleStatuses = deriveScheduleStatus(schedule, {
@@ -254,8 +255,8 @@ export default function Today({ showToast, openMetric, openEpisode, openSchedule
                     {fitbit.floors && <><div className="mono" style={{ fontSize: 14, color: 'var(--sky)', marginTop: 4 }}>{fitbit.floors}<span style={{ fontSize: 9 }}> fl</span></div><div className="mono" style={{ fontSize: 7.5, color: 'var(--ink3)', textTransform: 'uppercase' }}>floors</div></>}
                   </div>
                 </div>
-                <div className="prog"><div className="prog-fill" style={{ width: `${stepPct * 100}%`, background: stepPct >= 1 ? 'var(--green)' : 'var(--indigo)' }} /></div>
-                <div className="mono" style={{ fontSize: 8.5, color: 'var(--ink3)' }}>{Math.round(stepPct * 100)}% of 7,500 · tap for history ›</div>
+                <div className="prog"><div className="prog-fill" style={{ width: `${stepPct * 100}%`, background: stepsOverCeiling ? 'var(--amber)' : stepPct >= 1 ? 'var(--green)' : 'var(--indigo)' }} /></div>
+                <div className="mono" style={{ fontSize: 8.5, color: 'var(--ink3)' }}>{Math.round(stepPct * 100)}% of {SCHEDULE_TARGETS.steps.min.toLocaleString()} min{stepsOverCeiling ? ' · over pacing ceiling' : ''} · tap for history ›</div>
               </div>
 
               {/* Cardio load */}

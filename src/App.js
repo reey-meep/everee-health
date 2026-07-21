@@ -10,7 +10,7 @@ import Heart from './pages/Heart'
 import Toast from './components/Toast'
 import { handleAuthRedirect } from './lib/google-health'
 import { getDailyLog, getScheduleSettings, getFoodEntries, getPracticeLogs } from './lib/db'
-import { shiftSchedule, deriveScheduleStatus } from './lib/constants'
+import { shiftSchedule, deriveScheduleStatus, wakeTimeFor } from './lib/constants'
 
 const TABS = [
   { id: 'today', label: 'Today', icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> },
@@ -43,7 +43,7 @@ export default function App() {
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
   }
 
-  const [schedState, setSchedState] = useState({ practices: {}, mealCount: 0, scoreCount: 0, totals: { calories: 0, water: 0 }, wake: '07:30' })
+  const [schedState, setSchedState] = useState({ practices: {}, mealCount: 0, scoreCount: 0, totals: { calories: 0, water: 0 }, wake: wakeTimeFor() })
 
   async function loadSchedule() {
     const [l, st, foods, practiceRows] = await Promise.all([
@@ -62,7 +62,7 @@ export default function App() {
         calories: foods.reduce((sum, f) => sum + (f.calories || 0), 0),
         water: Number(l?.water_oz || 0),
       },
-      wake: st?.wake_time || '07:30',
+      wake: st?.wake_time_override || wakeTimeFor(),
     })
   }
 

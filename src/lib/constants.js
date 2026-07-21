@@ -208,29 +208,42 @@ export const SCHEDULE_KINDS = {
 
 export const SCHEDULE = [
   { id: 'wake',          time: '07:30', kind: 'rest',     title: 'Wake + sunlight',        detail: '10 min daylight if you can',            action: 'confirm' },
-  { id: 'meds_am',       time: '07:35', kind: 'meds',     title: 'Propranolol #1 + antihistamines', detail: 'Propranolol 10mg · Loratadine 10mg · Famotidine 20mg', action: 'confirm' },
+  { id: 'meds_am',       time: '07:30', kind: 'meds',     title: 'Propranolol #1 + antihistamines', detail: 'Propranolol 10mg · Loratadine 10mg · Famotidine 20mg', action: 'confirm' },
   { id: 'meal_1',        time: '07:45', kind: 'food',     title: 'Mini meal #1',            detail: '~150 cal',       action: 'meal', calories: 150, water: 12 },
   { id: 'water_0830',    time: '08:30', kind: 'water',    title: 'Water',                   detail: '12 oz',          action: 'water', water: 12 },
   { id: 'meal_2',        time: '09:00', kind: 'food',     title: 'Mini meal #2',            detail: '~150 cal',       action: 'meal', calories: 150 },
   { id: 'vestibular_1',  time: '09:30', kind: 'movement', title: 'Vestibular session #1',   detail: '10 min',         action: 'timer', minutes: 10 },
   { id: 'water_1000',    time: '10:00', kind: 'water',    title: 'Water',                   detail: '16 oz',          action: 'water', water: 16 },
   { id: 'meal_3',        time: '10:30', kind: 'food',     title: 'Mini meal #3',            detail: '~150 cal',       action: 'meal', calories: 150 },
-  { id: 'meds_mid',      time: '11:30', kind: 'meds',     title: 'Propranolol #2',          detail: '10mg',           action: 'confirm' },
   { id: 'meal_4',        time: '12:00', kind: 'food',     title: 'Mini meal #4',            detail: '~200 cal + 16 oz water', action: 'meal', calories: 200, water: 16 },
   { id: 'checkin_mid',   time: '12:30', kind: 'check',    title: 'Symptom check-in',        detail: 'Score your five',  action: 'checkin' },
-  { id: 'rest_1300',     time: '13:00', kind: 'rest',     title: 'Rest horizontal',         detail: '20 min',         action: 'timer', minutes: 20 },
+  { id: 'vestibular_2',  time: '13:00', kind: 'movement', title: 'Vestibular session #2',   detail: '10 min',         action: 'timer', minutes: 10 },
+  { id: 'meds_mid',      time: '13:30', kind: 'meds',     title: 'Propranolol #2',          detail: '10mg',           action: 'confirm' },
   { id: 'meal_5',        time: '14:00', kind: 'food',     title: 'Mini meal #5',            detail: '~150 cal + 12 oz water', action: 'meal', calories: 150, water: 12 },
-  { id: 'walk',          time: '14:30', kind: 'movement', title: 'Grounding walk',          detail: '15-20 min',      action: 'timer', minutes: 20 },
   { id: 'meal_6',        time: '15:30', kind: 'food',     title: 'Mini meal #6',            detail: '~150 cal + 12 oz water', action: 'meal', calories: 150, water: 12 },
-  { id: 'vestibular_2',  time: '16:00', kind: 'movement', title: 'Vestibular session #2',   detail: '10 min',         action: 'timer', minutes: 10 },
+  { id: 'vestibular_3',  time: '16:00', kind: 'movement', title: 'Vestibular session #3',   detail: '10 min',         action: 'timer', minutes: 10 },
   { id: 'meal_7',        time: '17:00', kind: 'food',     title: 'Mini meal #7',            detail: '~150 cal',       action: 'meal', calories: 150 },
-  { id: 'meds_pm',       time: '17:30', kind: 'meds',     title: 'Propranolol #3',          detail: '10mg -- do not let this one run late', action: 'confirm', critical: true },
   { id: 'meal_8',        time: '18:30', kind: 'food',     title: 'Mini meal #8 + Famotidine PM', detail: '~250 cal + 12 oz water', action: 'meal', calories: 250, water: 12 },
   { id: 'checkin_pm',    time: '19:00', kind: 'check',    title: 'Symptom check-in',        detail: 'Score your five',  action: 'checkin' },
+  { id: 'meds_pm',       time: '19:30', kind: 'meds',     title: 'Propranolol #3',          detail: '10mg -- do not let this one run late', action: 'confirm', critical: true },
   { id: 'meal_9',        time: '20:00', kind: 'food',     title: 'Mini meal #9',            detail: '~200 cal + 8 oz water', action: 'meal', calories: 200, water: 8 },
   { id: 'winddown',      time: '20:30', kind: 'rest',     title: 'Wind-down',               detail: 'Screens off · magnesium', action: 'confirm' },
   { id: 'bed',           time: '21:00', kind: 'rest',     title: 'In bed',                  detail: 'Aim 9-10h to clear 7-8h asleep', action: 'confirm' },
 ]
+
+// Rest days wake at 07:30; workdays an hour earlier, which shifts the whole
+// schedule up with it.
+export const WAKE_TIMES = { workday: '06:30', restday: '07:30' }
+export const isWorkday = (d = new Date()) => d.getDay() >= 1 && d.getDay() <= 5
+export const wakeTimeFor = (d = new Date()) => isWorkday(d) ? WAKE_TIMES.workday : WAKE_TIMES.restday
+
+// 24h internally (sorting, offsets); 12h everywhere it is shown.
+export function fmtTime(hhmm) {
+  const [h, m] = hhmm.split(':').map(Number)
+  const period = h < 12 ? 'AM' : 'PM'
+  const h12 = h % 12 === 0 ? 12 : h % 12
+  return `${h12}:${String(m).padStart(2, '0')} ${period}`
+}
 
 const toMin = t => { const [h, m] = t.split(':').map(Number); return h * 60 + m }
 const toHHMM = m => `${String(Math.floor(((m % 1440) + 1440) % 1440 / 60)).padStart(2, '0')}:${String(((m % 60) + 60) % 60).padStart(2, '0')}`
@@ -308,11 +321,10 @@ export const PROMPT_SOURCES = {
   meds_mid:     { type: 'practice', ids: ['prop2'] },
   meal_4:       { type: 'meal', index: 4 },
   checkin_mid:  { type: 'scores' },
-  rest_1300:    { type: 'info' },
-  meal_5:       { type: 'meal', index: 5 },
-  walk:         { type: 'practice', ids: ['walk'] },
-  meal_6:       { type: 'meal', index: 6 },
   vestibular_2: { type: 'practice', ids: ['vest2'] },
+  meal_5:       { type: 'meal', index: 5 },
+  meal_6:       { type: 'meal', index: 6 },
+  vestibular_3: { type: 'practice', ids: ['vest3'] },
   meal_7:       { type: 'meal', index: 7 },
   meds_pm:      { type: 'practice', ids: ['prop3'] },
   meal_8:       { type: 'meal', index: 8 },

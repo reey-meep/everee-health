@@ -1,4 +1,5 @@
-import { SCHEDULE_KINDS, SCHEDULE_TARGETS, minutesUntil, PROMPT_SOURCES } from '../lib/constants'
+import { useEffect, useState } from 'react'
+import { SCHEDULE_KINDS, SCHEDULE_TARGETS, minutesUntil, PROMPT_SOURCES, fmtTime } from '../lib/constants'
 
 // Read-only timeline. Nothing is ticked off here -- status is derived from the
 // food diary, water log, Daily Practices and symptom scores, so there is one
@@ -12,7 +13,20 @@ const WHERE = {
   info: null,
 }
 
+const toMin = t => { const [h, m] = t.split(':').map(Number); return h * 60 + m }
+
 export default function ScheduleDetail({ schedule, statuses, totals, onBack }) {
+  // Ticks so the now-marker keeps pace without a reload.
+  const [nowMin, setNowMin] = useState(() => { const d = new Date(); return d.getHours() * 60 + d.getMinutes() })
+  useEffect(() => {
+    const t = setInterval(() => { const d = new Date(); setNowMin(d.getHours() * 60 + d.getMinutes()) }, 30000)
+    return () => clearInterval(t)
+  }, [])
+
+  const nowLabel = fmtTime(`${String(Math.floor(nowMin / 60)).padStart(2, '0')}:${String(nowMin % 60).padStart(2, '0')}`)
+  // Index of the first prompt still ahead -- the marker sits just above it.
+  const firstAhead = schedule.findIndex(p => toMin(p.time) > nowMin)
+
   return (
     <div style={{ minHeight: '100svh', background: 'var(--bg)', paddingBottom: 40 }}>
       <div className="detail-header">
@@ -34,7 +48,7 @@ export default function ScheduleDetail({ schedule, statuses, totals, onBack }) {
       </div>
 
       <div style={{ padding: '0 16px', display: 'flex', flexDirection: 'column', gap: 8 }}>
-        {schedule.map(p => {
+        {schedule.map((p, idx) => {
           const status = statuses[p.id]
           const kind = SCHEDULE_KINDS[p.kind] || {}
           const src = PROMPT_SOURCES[p.id] || { type: 'info' }
@@ -42,8 +56,18 @@ export default function ScheduleDetail({ schedule, statuses, totals, onBack }) {
           const overdue = !status && mins < 0 && src.type !== 'info'
           const isNow = !status && mins >= 0 && mins <= 15
 
+          const marker = idx === firstAhead ? (
+            <div key="now" style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '2px 0' }}>
+              <span className="mono" style={{ fontSize: 9.5, color: 'var(--indigo)', fontWeight: 700, flexShrink: 0 }}>{nowLabel}</span>
+              <span style={{ flex: 1, height: 2, background: 'var(--indigo)', borderRadius: 1 }} />
+              <span style={{ width: 7, height: 7, borderRadius: 4, background: 'var(--indigo)', flexShrink: 0 }} />
+            </div>
+          ) : null
+
           return (
-            <div key={p.id} className="card" style={{
+            <div key={p.id} style={{ display: 'contents' }}>
+            {marker}
+            <div className="card" style={{
               padding: 0, display: 'flex', overflow: 'hidden',
               opacity: src.type === 'info' ? 0.72 : 1,
               borderColor: p.critical && overdue ? 'var(--red)' : isNow ? 'var(--indigo)' : undefined,
@@ -56,7 +80,7 @@ export default function ScheduleDetail({ schedule, statuses, totals, onBack }) {
                     color: p.critical && overdue ? 'var(--red)' : overdue ? 'var(--amber)' : 'var(--ink3)',
                     fontWeight: overdue ? 700 : 400,
                   }}>
-                    {p.time}{p.critical ? ' ⚠' : ''}
+                    {fmtTime(p.time)}{p.critical ? ' ⚠' : ''}
                   </span>
                   {status === 'done' && <span className="mono" style={{ fontSize: 10, color: 'var(--green)' }}>✓ logged</span>}
                   {status === 'partial' && <span className="mono" style={{ fontSize: 10, color: 'var(--amber)' }}>partial</span>}
@@ -73,8 +97,17 @@ export default function ScheduleDetail({ schedule, statuses, totals, onBack }) {
                 )}
               </div>
             </div>
+            </div>
           )
         })}
+        {/* Everything done for today -- marker sits at the end. */}
+        {firstAhead === -1 && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '2px 0' }}>
+            <span className="mono" style={{ fontSize: 9.5, color: 'var(--indigo)', fontWeight: 700 }}>{nowLabel}</span>
+            <span style={{ flex: 1, height: 2, background: 'var(--indigo)', borderRadius: 1 }} />
+            <span style={{ width: 7, height: 7, borderRadius: 4, background: 'var(--indigo)' }} />
+          </div>
+        )}
       </div>
     </div>
   )

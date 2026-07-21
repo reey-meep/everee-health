@@ -1,4 +1,4 @@
-import { SCHEDULE_TARGETS, SCHEDULE_KINDS, nextPrompt, minutesUntil } from '../lib/constants'
+import { SCHEDULE_TARGETS, SCHEDULE_KINDS, nextPrompt, minutesUntil, fmtTime } from '../lib/constants'
 
 function Bar({ label, value, target, color, ceilingAt }) {
   const pct = target ? Math.min(value / target, 1) : 0
@@ -68,7 +68,7 @@ export default function ScheduleWidget({ schedule, statuses, trackable, totals, 
                 </span>
               </div>
               <div className="mono" style={{ fontSize: 10.5, color: late && next.critical ? 'var(--red)' : late ? 'var(--amber)' : 'var(--ink3)', fontWeight: late ? 700 : 400, marginTop: 3 }}>
-                {next.time} · {until}{next.critical ? ' · critical' : ''}
+                {fmtTime(next.time)} · {until}{next.critical ? ' · critical' : ''}
               </div>
             </>
           ) : (

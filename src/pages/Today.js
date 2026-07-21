@@ -151,7 +151,7 @@ export default function Today({ showToast, openMetric, openEpisode, openSchedule
         active_zone_minutes: log.active_zone_minutes, cardio_minutes: log.active_zone_minutes,
         resting_hr: log.resting_hr, avg_hr: log.avg_hr, peak_hr: log.peak_hr,
         hrv: log.hrv, spo2: log.spo2, respiratory_rate: log.respiratory_rate,
-        sleep_hours: log.sleep_hours,
+        sleep_hours: log.sleep_hours, nap_minutes: log.nap_minutes, total_sleep_hours: log.total_sleep_hours,
       }
     : null
 
@@ -230,7 +230,7 @@ export default function Today({ showToast, openMetric, openEpisode, openSchedule
           <div className="vitals-strip">
             {[
               { label: 'Steps', value: fitbit.steps?.toLocaleString() ?? '--', color: 'var(--indigo)', sub: `${Math.round(stepPct * 100)}%`, metric: 'steps' },
-              { label: 'Sleep', value: fitbit.sleep_hours ? `${fitbit.sleep_hours}h` : '--', color: (fitbit.sleep_hours != null && fitbit.sleep_hours < 7) ? 'var(--amber)' : 'var(--purple)', metric: 'sleep_hours' },
+              { label: 'Sleep', value: fitbit.sleep_hours ? `${fitbit.sleep_hours}h` : '--', sub: fitbit.nap_minutes ? `+${fitbit.nap_minutes}m nap` : undefined, color: (fitbit.sleep_hours != null && fitbit.sleep_hours < 7) ? 'var(--amber)' : 'var(--purple)', metric: 'sleep_hours' },
               { label: 'HR rest', value: fitbit.resting_hr ? Math.round(fitbit.resting_hr) : '--', color: 'var(--red)', metric: 'resting_hr' },
               { label: 'HRV', value: fitbit.hrv ? Math.round(fitbit.hrv) : '--', color: 'var(--sky)', metric: 'hrv' },
             ].map((s, i) => (

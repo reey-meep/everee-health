@@ -171,10 +171,31 @@ async function snapshot(token: string, date: string) {
   const zone = (k: string) => num(azmRow?.[k]) || 0
   const distMm = first(dist, r => firstNum(r?.distance, ['millimetersSum', 'millimeters']))
 
+  // Overnight sleep and naps are counted separately. Summing every block stored
+  // 5.8h overnight + a 2.1h afternoon nap as 7.9h, which reads as clearing the
+  // 7h minimum when the night itself fell well short -- and makes a short night
+  // indistinguishable from a long one in the correlations.
+  //
+  // A block is overnight if it ENDS before local noon; anything else is a nap.
   let sleepHours: number | null = null
+  let napMinutes: number | null = null
+  let totalSleepHours: number | null = null
   if (sleep.length) {
-    const mins = sleep.reduce((s: number, p: any) => s + (num(p?.sleep?.summary?.minutesAsleep) || 0), 0)
-    if (mins > 0) sleepHours = Math.round((mins / 60) * 10) / 10
+    let overnight = 0, naps = 0
+    for (const p of sleep) {
+      const mins = num(p?.sleep?.summary?.minutesAsleep) || 0
+      if (!mins) continue
+      const iv = p?.sleep?.interval || {}
+      const end = iv.endTime ? new Date(iv.endTime).getTime() : null
+      const offsetSec = Number(String(iv.endUtcOffset ?? iv.startUtcOffset ?? '0s').replace('s', '')) || 0
+      const localEndHour = end != null ? new Date(end + offsetSec * 1000).getUTCHours() : 0
+      if (localEndHour < 12) overnight += mins
+      else naps += mins
+    }
+    if (overnight > 0) sleepHours = Math.round((overnight / 60) * 10) / 10
+    if (naps > 0) napMinutes = Math.round(naps)
+    const total = overnight + naps
+    if (total > 0) totalSleepHours = Math.round((total / 60) * 10) / 10
   }
 
   const round = (v: number | null, dp = 0) =>
@@ -201,6 +222,8 @@ async function snapshot(token: string, date: string) {
     spo2: round(avgOf(spo2, 'daily-oxygen-saturation', ['averagePercentage']), 1),
     respiratory_rate: round(avgOf(resp, 'daily-respiratory-rate', ['breathsPerMinute']), 1),
     sleep_hours: sleepHours,
+    nap_minutes: napMinutes,
+    total_sleep_hours: totalSleepHours,
   }
 }
 
